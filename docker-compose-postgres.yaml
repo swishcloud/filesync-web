@@ -1,0 +1,15 @@
+version: "3.7"
+services:
+  db:
+    container_name: filesync-db
+    image: postgres:latest
+    volumes:
+      - "dbdata:/var/lib/postgresql/data"
+    environment:
+      - POSTGRES_USER=filesync
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=filesync
+    ports:
+      - "6010:5432"
+volumes:
+  dbdata:
