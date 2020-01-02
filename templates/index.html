@@ -4,6 +4,11 @@
         <tr>
             <th>name</th> <th>md5</th> <th>user</th>
         </tr>
+        {{range .}}
+        <tr>
+            <th>{{.Name}}</th> <th>{{.Md5}}</th> <th></th>
+        </tr>
+        {{end}}
     </table>
 </div>
 {{end}}

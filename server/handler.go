@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
+	"golang.org/x/oauth2"
 )
 
 type pageModel struct {
@@ -40,8 +42,10 @@ func newPageModel(ctx *goweb.Context, data interface{}) pageModel {
 }
 
 const (
-	Path_Index        = "/"
-	Path_File_Details = "/file-details"
+	Path_Index          = "/"
+	Path_File_Details   = "/file-details"
+	Path_Login          = "/login"
+	Path_Login_Callback = "/login-callback"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root goweb.RouterGroup) {
@@ -50,15 +54,39 @@ func (s *FileSyncWebServer) bindHandlers(root goweb.RouterGroup) {
 	})
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File_Details, s.fileDetailsHandler())
+	root.GET(Path_Login, s.loginHandler())
+	root.GET(Path_Login_Callback, s.loginCallbackHandler())
 }
 func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		ctx.RenderPage(newPageModel(ctx, nil), "templates/layout.html", "templates/index.html")
+		files := s.storage.GetAllFiles()
+		ctx.RenderPage(newPageModel(ctx, files), "templates/layout.html", "templates/index.html")
 	}
 }
 
 func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		ctx.RenderPage(newPageModel(ctx, nil), "templates/layout.html", "templates/file_details.html")
+	}
+}
+
+func (s *FileSyncWebServer) loginHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		url := s.oAuth2Config.AuthCodeURL("state-string", oauth2.AccessTypeOffline)
+		http.Redirect(ctx.Writer, ctx.Request, url, 302)
+	}
+}
+
+func (s *FileSyncWebServer) loginCallbackHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		code := ctx.Request.URL.Query().Get("code")
+		//ctx.RenderPage(newPageModel(ctx, code), "templates/layout.html", "templates/approvalnativeapp.html")
+		token, err := s.oAuth2Config.Exchange(context.Background(), code)
+		if err != nil {
+			ctx.ShowErrorPage(http.StatusBadRequest, err.Error())
+			return
+		}
+		auth.Login(ctx, token, s.config.OAuth.JWKJsonUrl)
+		http.Redirect(ctx.Writer, ctx.Request, Path_Index, 302)
 	}
 }

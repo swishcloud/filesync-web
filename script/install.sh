@@ -1,2 +1,2 @@
 #set up and run database
-docker-compose  -f docker-compose-postgres.yaml up
+docker-compose -p filesync-web-project -f docker-compose-postgres.yaml up
