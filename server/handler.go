@@ -72,6 +72,11 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) loginHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		if ctx.Request.URL.Query().Get("native") == "1" {
+			s.oAuth2Config.RedirectURL = s.config.OAuth.NativeAppRedirectURL
+		} else {
+			s.oAuth2Config.RedirectURL = s.config.OAuth.RedirectURL
+		}
 		url := s.oAuth2Config.AuthCodeURL("state-string", oauth2.AccessTypeOffline)
 		http.Redirect(ctx.Writer, ctx.Request, url, 302)
 	}
@@ -80,8 +85,7 @@ func (s *FileSyncWebServer) loginHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) loginCallbackHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		code := ctx.Request.URL.Query().Get("code")
-		//ctx.RenderPage(newPageModel(ctx, code), "templates/layout.html", "templates/approvalnativeapp.html")
-		token, err := s.oAuth2Config.Exchange(context.Background(), code)
+		token, err := s.oAuth2Config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code)
 		if err != nil {
 			ctx.ShowErrorPage(http.StatusBadRequest, err.Error())
 			return

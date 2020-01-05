@@ -2,13 +2,13 @@ package storage
 
 import (
 	"database/sql"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/gostudy/tx"
-	"github.com/swishcloud/identity-provider/global"
 )
 
 type SQLManager struct {
@@ -20,7 +20,9 @@ var db *sql.DB
 func NewSQLManager(db_conn_info string) *SQLManager {
 	if db == nil {
 		d, err := sql.Open("postgres", db_conn_info)
-		global.Err(err)
+		if err != nil {
+			log.Fatal(err)
+		}
 		db = d
 	}
 	tx, err := tx.NewTx(db)

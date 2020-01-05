@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -18,25 +19,32 @@ type Config struct {
 	OAuth        ConfigOAuth `yaml:"oauth"`
 }
 type ConfigOAuth struct {
-	ClientId          string `yaml:"ClientId"`
-	TokenUrl          string `yaml:"TokenUrl"`
-	AuthUrl           string `yaml:"AuthUrl"`
-	Secret            string `yaml:"Secret"`
-	LogoutUrl         string `yaml:"LogoutUrl"`
-	LogoutRedirectUrl string `yaml:"LogoutRedirectUrl"`
-	JWKJsonUrl        string `yaml:"JWKJsonUrl"`
+	ClientId             string `yaml:"ClientId"`
+	TokenUrl             string `yaml:"TokenUrl"`
+	AuthUrl              string `yaml:"AuthUrl"`
+	Secret               string `yaml:"Secret"`
+	RedirectURL          string `yaml:"RedirectURL"`
+	NativeAppRedirectURL string `yaml:"NativeAppRedirectURL"`
+	LogoutUrl            string `yaml:"LogoutUrl"`
+	LogoutRedirectUrl    string `yaml:"LogoutRedirectUrl"`
+	JWKJsonUrl           string `yaml:"JWKJsonUrl"`
 }
 type FileSyncWebServer struct {
-	engine       *goweb.Engine
-	storage      storage.Storage
-	config       *Config
-	oAuth2Config *oauth2.Config
+	engine          *goweb.Engine
+	storage         storage.Storage
+	config          *Config
+	oAuth2Config    *oauth2.Config
+	skip_tls_verify bool
+	httpClient      *http.Client
 }
 
-func NewFileSyncWebServer() *FileSyncWebServer {
+func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebServer {
 	s := new(FileSyncWebServer)
+	s.skip_tls_verify = skip_tls_verify
+	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
+	http.DefaultClient = s.httpClient
 	s.engine = goweb.Default()
-	b, err := ioutil.ReadFile("config.yaml")
+	b, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,7 +71,7 @@ func (s *FileSyncWebServer) Serve() {
 	s.bindHandlers(s.engine.RouterGroup)
 	addr := ":2002"
 	log.Println("listening on", addr)
-	err := http.ListenAndServe(addr, s.engine)
+	err := http.ListenAndServeTLS(addr, ".cache/localhost.crt", ".cache/localhost.key", s.engine)
 	if err != nil {
 		log.Fatal(err)
 	}
