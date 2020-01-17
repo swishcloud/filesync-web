@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 
 	"golang.org/x/oauth2"
 
@@ -15,8 +16,10 @@ import (
 )
 
 type Config struct {
-	DB_CONN_INFO string      `yaml:"db_conn_info"`
-	OAuth        ConfigOAuth `yaml:"oauth"`
+	FILE_LOCATION string      `yaml:"file_location"`
+	DB_CONN_INFO  string      `yaml:"db_conn_info"`
+	OAuth         ConfigOAuth `yaml:"oauth"`
+	upload_folder string
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`
@@ -50,6 +53,12 @@ func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebS
 	}
 	s.config = new(Config)
 	err = yaml.Unmarshal(b, s.config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s.config.upload_folder = s.config.FILE_LOCATION + "upload/"
+	err = os.MkdirAll(s.config.upload_folder, os.ModePerm)
 	if err != nil {
 		log.Fatal(err)
 	}

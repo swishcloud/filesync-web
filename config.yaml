@@ -10,3 +10,4 @@ oauth:
   LogoutUrl: "https://localhost:8010/oauth2/sessions/logout"
   LogoutRedirectUrl: "https://localhost:2002"
   JWKJsonUrl: "https://localhost:8010/.well-known/jwks.json"
+file_location: .cache/files/
