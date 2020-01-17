@@ -1,4 +1,4 @@
-db_conn_info: "postgres://filesync:secret@192.168.100.8:6010/filesync?sslmode=disable"
+db_conn_info: "postgres://filesync:secret@localhost:6010/filesync?sslmode=disable"
 
 oauth:
   ClientId: "FILESYNC_WEB"

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	_ "github.com/lib/pq"
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/gostudy/tx"
 )
