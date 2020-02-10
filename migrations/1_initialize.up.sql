@@ -9,7 +9,7 @@ CREATE TABLE public."user"
     insert_time timestamp without time zone NOT NULL,
     op_id uuid NOT NULL,
     CONSTRAINT user_pkey PRIMARY KEY (id)
-)
+);
 
 -- Table: public.server
 
@@ -22,7 +22,7 @@ CREATE TABLE public.server
     ip character varying(20) COLLATE pg_catalog."default" NOT NULL,
     port integer NOT NULL,
     CONSTRAINT server_pkey PRIMARY KEY (id)
-)
+);
 
 -- Table: public.file_info
 
@@ -39,7 +39,7 @@ CREATE TABLE public.file_info
     CONSTRAINT "file_info-pkey" PRIMARY KEY (id),
     CONSTRAINT "file_info-uniquekey-md5" UNIQUE (md5)
 
-)
+);
 
 -- Table: public.server_file
 
@@ -62,7 +62,7 @@ CREATE TABLE public.server_file
         REFERENCES public.server (id) MATCH SIMPLE
         ON UPDATE NO ACTION
         ON DELETE NO ACTION
-)
+);
 
 -- Table: public.file_block
 
@@ -85,7 +85,7 @@ CREATE TABLE public.file_block
         REFERENCES public.server_file (id) MATCH SIMPLE
         ON UPDATE NO ACTION
         ON DELETE NO ACTION
-)
+);
 
 -- Table: public.file
 
@@ -104,4 +104,4 @@ CREATE TABLE public.file
         REFERENCES public.file_info (id) MATCH SIMPLE
         ON UPDATE NO ACTION
         ON DELETE NO ACTION
-)
+);
