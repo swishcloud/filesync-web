@@ -28,13 +28,14 @@ type ConfigOAuth struct {
 	Secret               string `yaml:"Secret"`
 	RedirectURL          string `yaml:"RedirectURL"`
 	NativeAppRedirectURL string `yaml:"NativeAppRedirectURL"`
+	IntrospectTokenURL   string `yaml:"IntrospectTokenURL"`
 	LogoutUrl            string `yaml:"LogoutUrl"`
 	LogoutRedirectUrl    string `yaml:"LogoutRedirectUrl"`
 	JWKJsonUrl           string `yaml:"JWKJsonUrl"`
+	UserInfoURL          string `yaml:"UserInfoURL"`
 }
 type FileSyncWebServer struct {
 	engine          *goweb.Engine
-	storage         storage.Storage
 	config          *Config
 	oAuth2Config    *oauth2.Config
 	skip_tls_verify bool
@@ -47,6 +48,7 @@ func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebS
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
 	s.engine = goweb.Default()
+	s.engine.WM.HandlerWidget = &HandlerWidget{s: s}
 	b, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		log.Fatal(err)
@@ -72,12 +74,12 @@ func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebS
 			TokenURL: s.config.OAuth.TokenUrl,
 		},
 	}
-
-	s.storage = storage.NewSQLManager(s.config.DB_CONN_INFO)
 	return s
 }
 func (s *FileSyncWebServer) Serve() {
 	s.bindHandlers(s.engine.RouterGroup)
+	apiGroup := s.engine.RouterGroup.Group()
+	s.bindApiHandlers(apiGroup)
 	addr := ":2002"
 	log.Println("listening on", addr)
 	err := http.ListenAndServeTLS(addr, ".cache/localhost.crt", ".cache/localhost.key", s.engine)
@@ -92,4 +94,31 @@ func (server *FileSyncWebServer) GetStorage(ctx *goweb.Context) storage.Storage 
 		ctx.Data["storage"] = m
 	}
 	return m.(storage.Storage)
+}
+
+type HandlerWidget struct {
+	s *FileSyncWebServer
+}
+
+func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
+}
+func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
+	m := ctx.Data["storage"]
+	if m != nil {
+		if ctx.Ok {
+			m.(storage.Storage).Commit()
+		} else {
+			m.(storage.Storage).Rollback()
+		}
+	}
+
+	if ctx.Err != nil {
+		data := struct {
+			Desc string
+		}{Desc: ctx.Err.Error()}
+		model := hw.s.newPageModel(ctx, data)
+		model.PageTitle = "ERROR"
+		ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+	}
+
 }

@@ -2,11 +2,11 @@
 <div class="container">
     <table class="table">
         <tr>
-            <th>name</th> <th>md5</th> <th>user</th>
+            <th>name</th> <th>description</th>  <th>size</th>  <th>time</th> <th>complete</th><th>user</th>
         </tr>
-        {{range .}}
+        {{range .Files}}
         <tr>
-            <th>{{.Name}}</th> <th>{{.Md5}}</th> <th></th>
+            <th><a style="color:blue" href="{{detailUrl .Id}}">{{.Name}}</a></th> <th>{{.Description}}</th><th>{{.Size}}</th><th>{{formatTime .InsertTime ""}}</th><th>{{.Completed}}</th><th>{{.UserName}}</th>
         </tr>
         {{end}}
     </table>

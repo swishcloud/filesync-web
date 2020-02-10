@@ -50,3 +50,14 @@ var app = {
 }
 
 $(document).ajaxStart(app.blockUi).ajaxComplete(app.unBlockUi)
+
+function setPersistentRootCookie(name,value){
+    var expiration_date = new Date();
+    var cookie_string = '';
+    expiration_date.setFullYear(expiration_date.getFullYear() + 1);
+    cookie_string = name+"="+value+"; path=/; expires=" + expiration_date.toUTCString();
+    document.cookie = cookie_string;
+}
+
+var timezone_offset_minutes = new Date().getTimezoneOffset();
+setPersistentRootCookie("tom",timezone_offset_minutes)

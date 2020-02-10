@@ -25,7 +25,7 @@ func TestPostfileHandler(t *testing.T) {
 		}
 	}
 	w.Close()
-	rac := common.NewRestApiClient("POST", at.ts.URL+API_PATH_File, buf.Bytes(), true)
+	rac := common.NewRestApiClient("POST", at.ts.URL+API_PATH_File_Upload, buf.Bytes(), true)
 	ct := w.FormDataContentType()
 	t.Log(ct)
 	rac.SetHeader("Content-Type", ct)
@@ -46,7 +46,7 @@ type apiTester struct {
 
 func NewApiTester() *apiTester {
 	s := NewFileSyncWebServer("config.yaml", false)
-	s.bindApiHandlers(s.engine.RouterGroup)
+	s.bindApiHandlers(&s.engine.RouterGroup)
 	at := new(apiTester)
 	at.server = s
 	at.ts = httptest.NewTLSServer(at.server.engine)

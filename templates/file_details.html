@@ -1,9 +1,35 @@
 {{define "content"}}
 <div class="container">
-    <table class="table">
-        <tr>
-            <th>upload-time</th> <th>md5</th> <th>user</th>
-        </tr>
-    </table>
+   
+    <a id="download" href="{{.DownloadUrl}}" class="text-primary">download</a>
+    <a id="delete" href="#" class="text-primary">delete</a>
 </div>
+{{end}}
+{{define "scripts"}}
+<script>
+    // function downloadFile(url){
+    // $.getJSON(url,function(d){
+    // alert(d.data)
+    // })
+    // }
+    // $("#download").on("click",function(){
+    //     downloadFile('{{downloadUrl}}')
+    // })
+    var delete_url="{{.DeleteUrl}}"
+    $("#delete").on("click",function(){
+        if(confirm("are you sure to delete this file?")){
+            $.ajax({
+            url: delete_url,
+            type: 'DELETE',
+            success: function(result) {
+                if(result.error==null){
+                    document.location.href="/"
+                }else{
+                    alert(result.error)
+                }
+             }
+        })
+        }
+    })
+</script>
 {{end}}

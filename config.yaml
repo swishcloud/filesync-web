@@ -7,6 +7,8 @@ oauth:
   Secret: "FILESYNC_WEB_SECRET"
   RedirectURL: "https://localhost:2002/login-callback"
   NativeAppRedirectURL: "https://localhost:11109/.approvalnativeapp"
+  UserInfoURL: "https://localhost:11109/user_info"
+  IntrospectTokenURL: "https://localhost:11109/api/introspect-token"
   LogoutUrl: "https://localhost:8010/oauth2/sessions/logout"
   LogoutRedirectUrl: "https://localhost:2002"
   JWKJsonUrl: "https://localhost:8010/.well-known/jwks.json"

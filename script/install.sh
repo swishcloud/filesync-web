@@ -1,6 +1,6 @@
 mkdir .cache
 #set up and run database
-docker-compose -p filesync-web-project -f docker-compose-postgres.yaml up
+docker-compose -p filesync-web-project -f docker-compose-postgres.yaml up -d
 #generate TLS certificate
 openssl req -newkey rsa:4096 \
 -x509 \
