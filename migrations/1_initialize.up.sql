@@ -1,56 +1,40 @@
--- Table: public.file
+-- Table: public."user"
 
--- DROP TABLE public.file;
+-- DROP TABLE public."user";
 
-CREATE TABLE public.file
+CREATE TABLE public."user"
 (
     id uuid NOT NULL,
+    name character varying(20) COLLATE pg_catalog."default" NOT NULL,
     insert_time timestamp without time zone NOT NULL,
-    name character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    description character varying(100) COLLATE pg_catalog."default" NOT NULL,
-    user_id uuid NOT NULL,
-    file_info_id uuid NOT NULL,
-    CONSTRAINT file_pkey PRIMARY KEY (id),
-    CONSTRAINT "file_fk-file_info_id" FOREIGN KEY (file_info_id)
-        REFERENCES public.file_info (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
+    op_id uuid NOT NULL,
+    CONSTRAINT user_pkey PRIMARY KEY (id)
 )
 WITH (
     OIDS = FALSE
 )
 TABLESPACE pg_default;
 
-ALTER TABLE public.file
+ALTER TABLE public."user"
     OWNER to filesync;
--- Table: public.file_block
+-- Table: public.server
 
--- DROP TABLE public.file_block;
+-- DROP TABLE public.server;
 
-CREATE TABLE public.file_block
+CREATE TABLE public.server
 (
     id uuid NOT NULL,
-    server_file_id uuid NOT NULL,
-    p_id uuid,
-    "end" bigint NOT NULL,
-    start bigint NOT NULL,
-    path uuid NOT NULL,
-    CONSTRAINT file_block_pkey PRIMARY KEY (id),
-    CONSTRAINT "file_block_fk-p_id" FOREIGN KEY (p_id)
-        REFERENCES public.file_block (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION,
-    CONSTRAINT "file_block_fk-server_file_id" FOREIGN KEY (server_file_id)
-        REFERENCES public.server_file (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
+    name character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    ip character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    port integer NOT NULL,
+    CONSTRAINT server_pkey PRIMARY KEY (id)
 )
 WITH (
     OIDS = FALSE
 )
 TABLESPACE pg_default;
 
-ALTER TABLE public.file_block
+ALTER TABLE public.server
     OWNER to filesync;
 -- Table: public.file_info
 
@@ -74,26 +58,6 @@ WITH (
 TABLESPACE pg_default;
 
 ALTER TABLE public.file_info
-    OWNER to filesync;
-
--- Table: public.server
-
--- DROP TABLE public.server;
-
-CREATE TABLE public.server
-(
-    id uuid NOT NULL,
-    name character varying(20) COLLATE pg_catalog."default" NOT NULL,
-    ip character varying(20) COLLATE pg_catalog."default" NOT NULL,
-    port integer NOT NULL,
-    CONSTRAINT server_pkey PRIMARY KEY (id)
-)
-WITH (
-    OIDS = FALSE
-)
-TABLESPACE pg_default;
-
-ALTER TABLE public.server
     OWNER to filesync;
 -- Table: public.server_file
 
@@ -124,22 +88,57 @@ TABLESPACE pg_default;
 
 ALTER TABLE public.server_file
     OWNER to filesync;
--- Table: public."user"
+-- Table: public.file_block
 
--- DROP TABLE public."user";
+-- DROP TABLE public.file_block;
 
-CREATE TABLE public."user"
+CREATE TABLE public.file_block
 (
     id uuid NOT NULL,
-    name character varying(20) COLLATE pg_catalog."default" NOT NULL,
-    insert_time timestamp without time zone NOT NULL,
-    op_id uuid NOT NULL,
-    CONSTRAINT user_pkey PRIMARY KEY (id)
+    server_file_id uuid NOT NULL,
+    p_id uuid,
+    "end" bigint NOT NULL,
+    start bigint NOT NULL,
+    path uuid NOT NULL,
+    CONSTRAINT file_block_pkey PRIMARY KEY (id),
+    CONSTRAINT "file_block_fk-p_id" FOREIGN KEY (p_id)
+        REFERENCES public.file_block (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "file_block_fk-server_file_id" FOREIGN KEY (server_file_id)
+        REFERENCES public.server_file (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
 )
 WITH (
     OIDS = FALSE
 )
 TABLESPACE pg_default;
 
-ALTER TABLE public."user"
+ALTER TABLE public.file_block
+    OWNER to filesync;
+-- Table: public.file
+
+-- DROP TABLE public.file;
+
+CREATE TABLE public.file
+(
+    id uuid NOT NULL,
+    insert_time timestamp without time zone NOT NULL,
+    name character varying(50) COLLATE pg_catalog."default" NOT NULL,
+    description character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    user_id uuid NOT NULL,
+    file_info_id uuid NOT NULL,
+    CONSTRAINT file_pkey PRIMARY KEY (id),
+    CONSTRAINT "file_fk-file_info_id" FOREIGN KEY (file_info_id)
+        REFERENCES public.file_info (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public.file
     OWNER to filesync;
