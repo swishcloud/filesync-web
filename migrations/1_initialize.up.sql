@@ -10,13 +10,7 @@ CREATE TABLE public."user"
     op_id uuid NOT NULL,
     CONSTRAINT user_pkey PRIMARY KEY (id)
 )
-WITH (
-    OIDS = FALSE
-)
-TABLESPACE pg_default;
 
-ALTER TABLE public."user"
-    OWNER to filesync;
 -- Table: public.server
 
 -- DROP TABLE public.server;
@@ -29,13 +23,7 @@ CREATE TABLE public.server
     port integer NOT NULL,
     CONSTRAINT server_pkey PRIMARY KEY (id)
 )
-WITH (
-    OIDS = FALSE
-)
-TABLESPACE pg_default;
 
-ALTER TABLE public.server
-    OWNER to filesync;
 -- Table: public.file_info
 
 -- DROP TABLE public.file_info;
@@ -52,13 +40,7 @@ CREATE TABLE public.file_info
     CONSTRAINT "file_info-uniquekey-md5" UNIQUE (md5)
 
 )
-WITH (
-    OIDS = FALSE
-)
-TABLESPACE pg_default;
 
-ALTER TABLE public.file_info
-    OWNER to filesync;
 -- Table: public.server_file
 
 -- DROP TABLE public.server_file;
@@ -81,13 +63,7 @@ CREATE TABLE public.server_file
         ON UPDATE NO ACTION
         ON DELETE NO ACTION
 )
-WITH (
-    OIDS = FALSE
-)
-TABLESPACE pg_default;
 
-ALTER TABLE public.server_file
-    OWNER to filesync;
 -- Table: public.file_block
 
 -- DROP TABLE public.file_block;
@@ -110,13 +86,7 @@ CREATE TABLE public.file_block
         ON UPDATE NO ACTION
         ON DELETE NO ACTION
 )
-WITH (
-    OIDS = FALSE
-)
-TABLESPACE pg_default;
 
-ALTER TABLE public.file_block
-    OWNER to filesync;
 -- Table: public.file
 
 -- DROP TABLE public.file;
@@ -135,10 +105,3 @@ CREATE TABLE public.file
         ON UPDATE NO ACTION
         ON DELETE NO ACTION
 )
-WITH (
-    OIDS = FALSE
-)
-TABLESPACE pg_default;
-
-ALTER TABLE public.file
-    OWNER to filesync;
