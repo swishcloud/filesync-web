@@ -20,6 +20,8 @@ type Config struct {
 	DB_CONN_INFO  string      `yaml:"db_conn_info"`
 	OAuth         ConfigOAuth `yaml:"oauth"`
 	upload_folder string
+	Tls_cert_file string `yaml:"tls_cert_file"`
+	Tls_key_file  string `yaml:"tls_key_file"`
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`
@@ -82,7 +84,7 @@ func (s *FileSyncWebServer) Serve() {
 	s.bindApiHandlers(apiGroup)
 	addr := ":2002"
 	log.Println("listening on", addr)
-	err := http.ListenAndServeTLS(addr, ".cache/localhost.crt", ".cache/localhost.key", s.engine)
+	err := http.ListenAndServeTLS(addr, s.config.Tls_cert_file, s.config.Tls_key_file, s.engine)
 	if err != nil {
 		log.Fatal(err)
 	}

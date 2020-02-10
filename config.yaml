@@ -13,3 +13,5 @@ oauth:
   LogoutRedirectUrl: "https://localhost:2002"
   JWKJsonUrl: "https://localhost:8010/.well-known/jwks.json"
 file_location: .cache/files/
+tls_cert_file: .cache/localhost.crt
+tls_key_file: .cache/localhost.key
