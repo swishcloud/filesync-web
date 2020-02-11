@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"golang.org/x/oauth2"
 
@@ -106,6 +107,20 @@ func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
 	log.Println(ctx.Request.Method, ctx.Request.URL)
 }
 func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
+	if ctx.Err != nil {
+		accept := ctx.Request.Header.Get("Accept")
+		if strings.Contains(accept, "application/json") {
+			ctx.Failed(ctx.Err.Error())
+		} else {
+			data := struct {
+				Desc string
+			}{Desc: ctx.Err.Error()}
+			model := hw.s.newPageModel(ctx, data)
+			model.PageTitle = "ERROR"
+			ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+		}
+	}
+
 	m := ctx.Data["storage"]
 	if m != nil {
 		if ctx.Ok {
@@ -113,15 +128,6 @@ func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 		} else {
 			m.(storage.Storage).Rollback()
 		}
-	}
-
-	if ctx.Err != nil {
-		data := struct {
-			Desc string
-		}{Desc: ctx.Err.Error()}
-		model := hw.s.newPageModel(ctx, data)
-		model.PageTitle = "ERROR"
-		ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
 	}
 
 }

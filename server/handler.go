@@ -57,7 +57,10 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 	m := pageModel{}
 	m.Data = data
 	m.MobileCompatible = true
-	u, _ := s.GetLoginUser(ctx)
+	u, err := s.GetLoginUser(ctx)
+	if err != nil {
+		panic(err)
+	}
 	m.User = u
 	m.WebsiteName = "filesync-web"
 	return m
