@@ -79,7 +79,11 @@ func (m *SQLManager) InsertFileInfo(md5, name, userId, size string) {
 	m.InsertFile(name, userId, file_info_id)
 
 	add_server_file := "INSERT INTO public.server_file(id, file_info_id, insert_time, uploaded_size, is_completed, server_id)VALUES ($1,$2,$3,$4,$5,$6);"
-	_ = m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, m.GetServer().Id)
+	server := m.GetServer()
+	if server == nil {
+		panic("not found any server node exists")
+	}
+	_ = m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, server.Id)
 }
 
 func (m *SQLManager) DeleteFile(id string) {
