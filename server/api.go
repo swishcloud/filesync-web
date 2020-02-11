@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -81,7 +80,6 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 		name := ctx.Request.PostForm.Get("name")
 		md5 := ctx.Request.PostForm.Get("md5")
 		size := ctx.Request.PostForm.Get("size")
-		log.Println(name, md5)
 		s.GetStorage(ctx).InsertFileInfo(md5, name, s.MustGetLoginUser(ctx).Id, size)
 		ctx.Success(nil)
 	}
