@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
@@ -9,13 +10,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/swishcloud/goweb"
+	"golang.org/x/oauth2"
 )
 
 const (
-	API_PATH_File_Upload = "/api/file_upload"
-	API_PATH_File        = "/api/file"
-	API_PATH_File_Block  = "/api/file-block"
-	API_PATH_Login       = "/api/login"
+	API_PATH_File_Upload    = "/api/file_upload"
+	API_PATH_File           = "/api/file"
+	API_PATH_File_Block     = "/api/file-block"
+	API_PATH_Login          = "/api/login"
+	API_PATH_Exchange_Token = "/api/exchange_token"
+	API_PATH_Auth_Code_Url  = "/api/auth_code_url"
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
@@ -26,6 +30,8 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.GET(API_PATH_File_Block, s.fileBlockApiGetHandler())
 	group.POST(API_PATH_File_Block, s.fileBlockApiPostHandler())
 	group.POST(API_PATH_Login, s.fileBlockApiPostHandler())
+	group.POST(API_PATH_Exchange_Token, s.exchangeTokenApiPostHandler())
+	group.GET(API_PATH_Auth_Code_Url, s.authCodeURLApiGetHandler())
 }
 
 func (s *FileSyncWebServer) fileUploadApiPostHandler() goweb.HandlerFunc {
@@ -116,5 +122,26 @@ func (s *FileSyncWebServer) fileBlockApiPostHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) loginApiPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 
+	}
+}
+
+func (s *FileSyncWebServer) exchangeTokenApiPostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		code := ctx.Request.FormValue("code")
+		s.oAuth2Config.RedirectURL = s.config.OAuth.NativeAppRedirectURL
+		token, err := s.oAuth2Config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code)
+		if err != nil {
+			panic(err)
+		}
+		ctx.Success(token.AccessToken)
+	}
+}
+
+func (s *FileSyncWebServer) authCodeURLApiGetHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		state := ctx.Request.FormValue("state")
+		s.oAuth2Config.RedirectURL = s.config.OAuth.NativeAppRedirectURL
+		url := s.oAuth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+		ctx.Success(url)
 	}
 }

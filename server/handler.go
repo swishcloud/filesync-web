@@ -177,7 +177,7 @@ func (s *FileSyncWebServer) logoutHandler() goweb.HandlerFunc {
 			parameters.Add("id_token_hint", id_token)
 			redirect_url := s.config.OAuth.LogoutRedirectUrl
 			parameters.Add("post_logout_redirect_uri", redirect_url)
-			http.Redirect(ctx.Writer, ctx.Request, s.config.OAuth.LogoutRedirectUrl, 302)
+			http.Redirect(ctx.Writer, ctx.Request, s.config.OAuth.LogoutUrl+"?"+parameters.Encode(), 302)
 		})
 	}
 }

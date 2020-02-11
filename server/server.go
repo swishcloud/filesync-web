@@ -103,6 +103,7 @@ type HandlerWidget struct {
 }
 
 func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
+	log.Println(ctx.Request.Method, ctx.Request.URL)
 }
 func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 	m := ctx.Data["storage"]
