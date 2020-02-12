@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="container">
+        <a class="text-primary" href='{{editUrl ""}}'>create server</a>
+    <table class="table mt-2">
+        <tr>
+            <th>name</th> <th>ip</th>  <th>port</th>
+        </tr>
+        {{range .}}
+        <tr><th><a class="text-primary" href="{{editUrl .Id}}">{{.Name}}</a></th> <th>{{.Ip}}</th>  <th>{{.Port}}</th></tr>
+        {{end}}
+    </table>
+</div>
+{{end}}
+{{define "scripts"}}
+{{end}}
