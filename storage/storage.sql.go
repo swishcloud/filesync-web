@@ -111,14 +111,11 @@ FROM public.file_block where server_file_id=$1 order by "end" desc;`
 	for rows.Next() {
 		fileBblock := models.FileBlock{}
 		rows.MustScan(&fileBblock.Id, &fileBblock.Server_file_id, &fileBblock.P_id, &fileBblock.End, &fileBblock.Start, &fileBblock.Path)
-		if lastBlock != nil && lastBlock.P_id != nil && fileBblock.Id != *lastBlock.P_id {
+		if lastBlock != nil && fileBblock.End != lastBlock.Start {
 			continue
 		}
 		fileBblocks = append(fileBblocks, fileBblock)
 		lastBlock = &fileBblock
-		if lastBlock.P_id == nil {
-			break
-		}
 	}
 	return fileBblocks
 }
