@@ -45,19 +45,52 @@ func (m *SQLManager) InsertFile(name, userId, file_info_id string) {
 		VALUES ($1, $2, $3, $4, $5, $6);`
 	m.Tx.MustExec(insert_file, uuid.New(), time.Now().UTC(), name, "", userId, file_info_id)
 }
-func (m *SQLManager) GetServer() *models.Server {
+func (m *SQLManager) GetServers() []models.Server {
+	return m.getServers("")
+}
+
+func (m *SQLManager) getServers(where string, args ...interface{}) []models.Server {
 	query := `SELECT id, name, ip, port
-	FROM public.server;`
-	row := m.Tx.MustQueryRow(query)
-	server := new(models.Server)
-	err := row.Scan(&server.Id, &server.Name, &server.Ip, &server.Port)
-	if err != nil {
-		if err != sql.ErrNoRows {
+	FROM public.server ` + where
+	rows := m.Tx.MustQuery(query, args...)
+	result := []models.Server{}
+	for rows.Next() {
+		server := models.Server{}
+		err := rows.Scan(&server.Id, &server.Name, &server.Ip, &server.Port)
+		if err != nil {
 			panic(err)
 		}
-		return nil
+		result = append(result, server)
 	}
-	return server
+	return result
+}
+func (m *SQLManager) GetServer(server_id string) *models.Server {
+	servers := m.getServers("where id=$1", server_id)
+	if len(servers) > 0 {
+		return &servers[0]
+	}
+	return nil
+}
+func (m *SQLManager) AddServer(name, ip, port string) {
+	m.Tx.MustExec(`INSERT INTO public.server(
+		id, name, ip, port)
+		VALUES ($1, $2, $3, $4);`, uuid.New(), name, ip, port)
+}
+func (m *SQLManager) DeleteServer(id string) {
+	rows := m.Tx.MustQuery("SELECT * FROM public.server_file where server_id=$1 limit 1;", id)
+	if rows.Next() {
+		//this server has files,forbidden deleting it
+		panic("there are files on this server,you can not delete it")
+	} else {
+		//do deleting
+		m.Tx.MustExec(`DELETE FROM public.server
+		WHERE id=$1;`, id)
+	}
+}
+func (m *SQLManager) UpdateServer(id, name, ip, port string) {
+	m.Tx.MustExec(`UPDATE public.server
+	SET name=$2, ip=$3, port=$4
+	WHERE id=$1;`, id, name, ip, port)
 }
 func (m *SQLManager) InsertFileInfo(md5, name, userId, size string) {
 	query_file_info := `SELECT id
@@ -79,11 +112,11 @@ func (m *SQLManager) InsertFileInfo(md5, name, userId, size string) {
 	m.InsertFile(name, userId, file_info_id)
 
 	add_server_file := "INSERT INTO public.server_file(id, file_info_id, insert_time, uploaded_size, is_completed, server_id)VALUES ($1,$2,$3,$4,$5,$6);"
-	server := m.GetServer()
-	if server == nil {
+	servers := m.GetServers()
+	if len(servers) == 0 {
 		panic("not found any server node exists")
 	}
-	_ = m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, server.Id)
+	_ = m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, servers[0].Id)
 }
 
 func (m *SQLManager) DeleteFile(id string) {

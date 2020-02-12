@@ -103,8 +103,10 @@ type HandlerWidget struct {
 	s *FileSyncWebServer
 }
 
-func (*HandlerWidget) Pre_Process(ctx *goweb.Context) {
+func (hw *HandlerWidget) Pre_Process(ctx *goweb.Context) {
 	log.Println(ctx.Request.Method, ctx.Request.URL)
+	user, _ := hw.s.GetLoginUser(ctx)
+	ctx.Data["user"] = user
 }
 func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 	if ctx.Err != nil {

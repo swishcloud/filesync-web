@@ -57,7 +57,7 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 	m := pageModel{}
 	m.Data = data
 	m.MobileCompatible = true
-	u, _ := s.GetLoginUser(ctx)
+	u := ctx.Data["user"].(*models.User)
 	m.User = u
 	m.WebsiteName = "filesync-web"
 	return m
@@ -70,6 +70,8 @@ const (
 	Path_Login_Callback = "/login-callback"
 	Path_Logout         = "/logout"
 	Path_Download_File  = "/file/download"
+	Path_Server         = "/server"
+	Path_Server_Edit    = "/server_edit"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root goweb.RouterGroup) {
@@ -84,6 +86,59 @@ func (s *FileSyncWebServer) bindHandlers(root goweb.RouterGroup) {
 	root.GET(Path_Login_Callback, s.loginCallbackHandler())
 	root.POST(Path_Logout, s.logoutHandler())
 	root.DELETE(Path_File, s.fileDeleteHandler())
+	root.GET(Path_Server, s.serverHandler())
+	root.DELETE(Path_Server, s.serverDeleteHandler())
+	root.GET(Path_Server_Edit, s.serverEditHandler())
+	root.POST(Path_Server_Edit, s.serverEditPostHandler())
+}
+func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		servers := s.GetStorage(ctx).GetServers()
+		ctx.FuncMap["editUrl"] = func(id string) (string, error) {
+			p := ""
+			if id != "" {
+				p = "?id=" + id
+			}
+			return Path_Server_Edit + p, nil
+		}
+		ctx.RenderPage(s.newPageModel(ctx, servers), "templates/layout.html", "templates/server.html")
+	}
+}
+func (s *FileSyncWebServer) serverDeleteHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		s.GetStorage(ctx).DeleteServer(id)
+		ctx.Success(nil)
+	}
+}
+func (s *FileSyncWebServer) serverEditPostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		name := ctx.Request.FormValue("name")
+		ip := ctx.Request.FormValue("ip")
+		port := ctx.Request.FormValue("port")
+		if id == "" {
+			//add server
+			s.GetStorage(ctx).AddServer(name, ip, port)
+		} else {
+			//update server
+			s.GetStorage(ctx).UpdateServer(id, name, ip, port)
+		}
+		ctx.Success(nil)
+	}
+}
+func (s *FileSyncWebServer) serverEditHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		server_id := ctx.Request.FormValue("id")
+		server := &models.Server{}
+		if server_id != "" {
+			server = s.GetStorage(ctx).GetServer(server_id)
+			if server == nil {
+				panic("server not found")
+			}
+		}
+		ctx.RenderPage(s.newPageModel(ctx, map[string]interface{}{"DeleteUrl": Path_Server + "?id=" + server.Id, "server": server}), "templates/layout.html", "templates/server_edit.html")
+	}
 }
 func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {

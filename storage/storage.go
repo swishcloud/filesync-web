@@ -19,4 +19,9 @@ type Storage interface {
 	AddFileBlock(server_file_id, name string, start, end int64)
 	GetUserByOpId(op_id string) *models.User
 	AddOrUpdateUser(sub string, name string)
+	GetServers() []models.Server
+	GetServer(server_id string) *models.Server
+	AddServer(name, ip, port string)
+	UpdateServer(id, name, ip, port string)
+	DeleteServer(id string)
 }
