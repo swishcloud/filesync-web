@@ -185,17 +185,19 @@ func (m *SQLManager) getFiles(where string, args ...interface{}) []models.File {
 }
 
 func (m *SQLManager) GetServerFileByFileId(file_id string) *models.ServerFile {
-	return m.getServerFile("where file.id=$1", file_id)
+	return m.getServerFile("file.id=$1", file_id)
 }
 func (m *SQLManager) GetServerFileByServerFileId(server_file_id string) *models.ServerFile {
-	return m.getServerFile("where b.id=$1", server_file_id)
+	return m.getServerFile("b.id=$1", server_file_id)
 }
 func (m *SQLManager) getServerFile(where string, args ...interface{}) *models.ServerFile {
 	var sqlstr = `SELECT file.id,file.name,file.is_hidden,file.directory_id,a.size,a.path,b.id,b.insert_time,b.uploaded_size,b.is_completed,c.name as server_name,c.ip,c.port
 	from file_info as a 
 	inner join  server_file as b on a.id=b.file_info_id 
 	inner join  server as c on b.server_id=c.id 
-	inner join file on file.file_info_id=a.id `
+	inner join file on file.file_info_id=a.id
+	inner join directory on file.directory_id=directory.id 
+	where directory.is_deleted=false and `
 	sqlstr += where
 	sqlstr += " order by uploaded_size desc"
 	row := m.Tx.MustQueryRow(sqlstr, args...)
@@ -216,7 +218,7 @@ func (m *SQLManager) GetServerFile(md5, name, directory_path, user_id string) *m
 	if directory == nil {
 		panic("parent directory not found")
 	}
-	return m.getServerFile("where md5=$1 and file.name=$2 and directory_id=$3", md5, name, directory.Id)
+	return m.getServerFile("md5=$1 and file.name=$2 and directory.id=$3 and directory.user_id=$4", md5, name, directory.Id, user_id)
 }
 
 func (m *SQLManager) CompleteServerFile(server_file_id string) {
@@ -265,10 +267,10 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
 
 func (m *SQLManager) GetDirectory(path string, user_id string) *models.Directory {
 	query := `WITH RECURSIVE CTE(id,p_id,name,path)as(
-		select id,p_id,name,cast (name as text) as path  from directory  where is_deleted=false and user_id=$1 and name=''
+		select id,p_id,name,cast (name as text) as path  from directory  where user_id=$1 and name=''
 		UNION ALL select directory.id,directory.p_id,directory.name,path || '/' || directory.name from CTE 
 		INNER JOIN directory ON CTE.id=directory.p_id
-		where $2 like path || '%'
+		where $2 like path || '%' and directory.is_deleted=false
 		)select id,is_hidden from directory where id in(select id from CTE where path=$2);`
 	p := path
 	if path != "" {
