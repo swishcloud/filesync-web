@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/tls"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/swishcloud/filesync-web/storage"
+	"github.com/swishcloud/filesync-web/storage/models"
+	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/goweb"
 )
 
@@ -43,6 +46,7 @@ type FileSyncWebServer struct {
 	oAuth2Config    *oauth2.Config
 	skip_tls_verify bool
 	httpClient      *http.Client
+	rac             *common.RestApiClient
 }
 
 func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebServer {
@@ -50,6 +54,7 @@ func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebS
 	s.skip_tls_verify = skip_tls_verify
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
+	s.rac = common.NewRestApiClient(skip_tls_verify)
 	s.engine = goweb.Default()
 	s.engine.WM.HandlerWidget = &HandlerWidget{s: s}
 	b, err := ioutil.ReadFile(configPath)
@@ -80,7 +85,7 @@ func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebS
 	return s
 }
 func (s *FileSyncWebServer) Serve() {
-	s.bindHandlers(s.engine.RouterGroup)
+	s.bindHandlers(s.engine.RouterGroup.Group())
 	apiGroup := s.engine.RouterGroup.Group()
 	s.bindApiHandlers(apiGroup)
 	addr := ":2002"
@@ -99,14 +104,19 @@ func (server *FileSyncWebServer) GetStorage(ctx *goweb.Context) storage.Storage 
 	return m.(storage.Storage)
 }
 
+func (s *FileSyncWebServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
+	if ctx.Data["user"] == nil {
+		return nil, errors.New("no logged user")
+	}
+	return ctx.Data["user"].(*models.User), nil
+}
+
 type HandlerWidget struct {
 	s *FileSyncWebServer
 }
 
 func (hw *HandlerWidget) Pre_Process(ctx *goweb.Context) {
 	log.Println(ctx.Request.Method, ctx.Request.URL)
-	user, _ := hw.s.GetLoginUser(ctx)
-	ctx.Data["user"] = user
 }
 func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 	if ctx.Err != nil {

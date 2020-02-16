@@ -29,23 +29,6 @@ type pageModel struct {
 	PageTitle        string
 }
 
-func (s *FileSyncWebServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
-	var sub string
-	if tokenstr, err := auth.GetBearerToken(ctx); err != nil {
-		if s, err := auth.GetSessionByToken(ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err != nil {
-			return nil, err
-		} else {
-			sub = s.Claims["sub"].(string)
-		}
-	} else {
-		token := &oauth2.Token{AccessToken: tokenstr}
-		if sub, err = auth.CheckToken(s.oAuth2Config, token, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err != nil {
-			return nil, err
-		}
-	}
-	user := s.GetStorage(ctx).GetUserByOpId(sub)
-	return user, nil
-}
 func (s *FileSyncWebServer) MustGetLoginUser(ctx *goweb.Context) *models.User {
 	user, err := s.GetLoginUser(ctx)
 	if err != nil {
@@ -57,8 +40,9 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 	m := pageModel{}
 	m.Data = data
 	m.MobileCompatible = true
-	u := ctx.Data["user"].(*models.User)
-	m.User = u
+	if ctx.Data["user"] != nil {
+		m.User = ctx.Data["user"].(*models.User)
+	}
 	m.WebsiteName = "filesync-web"
 	return m
 }
@@ -66,6 +50,7 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 const (
 	Path_Index          = "/"
 	Path_File           = "/file"
+	Path_File_List      = "/file/list"
 	Path_Login          = "/login"
 	Path_Login_Callback = "/login-callback"
 	Path_Logout         = "/logout"
@@ -74,7 +59,7 @@ const (
 	Path_Server_Edit    = "/server_edit"
 )
 
-func (s *FileSyncWebServer) bindHandlers(root goweb.RouterGroup) {
+func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.Use(s.genericMiddleware())
 	root.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
@@ -82,6 +67,7 @@ func (s *FileSyncWebServer) bindHandlers(root goweb.RouterGroup) {
 	})
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File, s.fileDetailsHandler())
+	root.GET(Path_File_List, s.fileListHandler())
 	root.GET(Path_Login, s.loginHandler())
 	root.GET(Path_Login_Callback, s.loginCallbackHandler())
 	root.POST(Path_Logout, s.logoutHandler())
@@ -143,6 +129,10 @@ func (s *FileSyncWebServer) serverEditHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		ctx.Writer.EnsureInitialzed(true)
+		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
+			user := s.GetStorage(ctx).GetUserByOpId(session.Claims["sub"].(string))
+			ctx.Data["user"] = user
+		}
 	}
 }
 func (s *FileSyncWebServer) authenticateHandler() goweb.HandlerFunc {
@@ -151,7 +141,8 @@ func (s *FileSyncWebServer) authenticateHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		files := s.GetStorage(ctx).GetAllFiles()
+		directory := s.GetStorage(ctx).GetDirectory("", s.MustGetLoginUser(ctx).Id)
+		files := s.GetStorage(ctx).GetFiles(directory.Id)
 		data := struct {
 			Files []models.File
 		}{Files: files}
@@ -167,6 +158,37 @@ func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 		file_id := ctx.Request.FormValue("file_id")
 		s.GetStorage(ctx).DeleteFile(file_id)
 		ctx.Success(nil)
+	}
+}
+func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		path := ctx.Request.FormValue("path")
+		directory := s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id)
+		files := s.GetStorage(ctx).GetFiles(directory.Id)
+		directories := s.GetStorage(ctx).GetDirectories(directory.Id)
+		data := struct {
+			Path        string
+			Files       []models.File
+			Directories []models.Directory
+		}{Path: path, Files: files, Directories: directories}
+		ctx.FuncMap["detailUrl"] = func(id string) (string, error) {
+			return Path_File + "?id=" + id, nil
+		}
+		ctx.FuncMap["directoryUrl"] = func(dir_name string) (string, error) {
+			p := path + "/" + dir_name
+			p = strings.TrimPrefix(p, "/")
+			return Path_File_List + "?path=" + p, nil
+		}
+		ctx.FuncMap["isHidden"] = func(isHidden bool) (string, error) {
+			if isHidden {
+				return "true", nil
+			} else {
+				return "false", nil
+			}
+		}
+		model := s.newPageModel(ctx, data)
+		model.PageTitle = "/" + path
+		ctx.RenderPage(model, "templates/layout.html", "templates/file_list.html")
 	}
 }
 func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
@@ -200,7 +222,21 @@ func (s *FileSyncWebServer) loginHandler() goweb.HandlerFunc {
 		http.Redirect(ctx.Writer, ctx.Request, url, 302)
 	}
 }
-
+func (s *FileSyncWebServer) addOrUpdateUser(ctx *goweb.Context, token *oauth2.Token) {
+	rar := common.NewRestApiRequest("GET", s.config.OAuth.UserInfoURL, nil).UseToken(s.oAuth2Config, token)
+	resp, err := s.rac.Do(rar)
+	if err != nil {
+		panic(err)
+	}
+	m, err := common.ReadAsMap(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	data := m["data"].(map[string]interface{})
+	sub := data["Id"].(string)
+	name := data["Name"].(string)
+	s.GetStorage(ctx).AddOrUpdateUser(sub, name)
+}
 func (s *FileSyncWebServer) loginCallbackHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		code := ctx.Request.URL.Query().Get("code")
@@ -208,26 +244,15 @@ func (s *FileSyncWebServer) loginCallbackHandler() goweb.HandlerFunc {
 		if err != nil {
 			panic(err)
 		}
-		session := auth.Login(ctx, token, s.config.OAuth.JWKJsonUrl)
+		auth.Login(ctx, token, s.config.OAuth.JWKJsonUrl)
 		http.Redirect(ctx.Writer, ctx.Request, Path_Index, 302)
-
-		rac := common.NewRestApiClient("GET", s.config.OAuth.UserInfoURL, nil, s.skip_tls_verify).UseToken(s.oAuth2Config, session.GetToken())
-		resp, err := rac.Do()
-		if err != nil {
-			panic(err)
-		}
-		m := common.ReadAsMap(resp.Body)
-		data := m["data"].(map[string]interface{})
-		sub := data["Id"].(string)
-		name := data["Name"].(string)
-		s.GetStorage(ctx).AddOrUpdateUser(sub, name)
-		log.Println(m)
+		s.addOrUpdateUser(ctx, token)
 	}
 }
 
 func (s *FileSyncWebServer) logoutHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		auth.Logout(ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify, func(id_token string) {
+		auth.Logout(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify, func(id_token string) {
 			parameters := url.Values{}
 			parameters.Add("id_token_hint", id_token)
 			redirect_url := s.config.OAuth.LogoutRedirectUrl

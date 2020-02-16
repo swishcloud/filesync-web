@@ -16,6 +16,7 @@ type File struct {
 	User_id     string
 	Size        int64
 	Completed   bool
+	Is_hidden   bool
 }
 
 type FileBlock struct {
@@ -30,7 +31,9 @@ type FileBlock struct {
 type ServerFile struct {
 	Name           string
 	Path           string
+	File_id        string
 	Server_file_id string
+	Directory_id   string
 	Insert_time    time.Time
 	Uploaded_size  int64
 	Is_completed   bool
@@ -38,6 +41,7 @@ type ServerFile struct {
 	Ip             string
 	Port           int
 	Size           int64
+	Is_hidden      bool
 }
 
 type Server struct {
@@ -45,4 +49,14 @@ type Server struct {
 	Name string
 	Ip   string
 	Port int
+}
+
+type Directory struct {
+	Id          string
+	Name        string
+	Insert_time time.Time
+	P_id        string
+	User_id     string
+	User_name   string
+	Is_hidden   bool
 }

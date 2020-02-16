@@ -13,6 +13,7 @@ import (
 )
 
 func TestPostfileHandler(t *testing.T) {
+	rac := common.NewRestApiClient(true)
 	at := NewApiTester()
 	buf := bytes.NewBuffer([]byte{})
 	w := multipart.NewWriter(buf)
@@ -25,11 +26,11 @@ func TestPostfileHandler(t *testing.T) {
 		}
 	}
 	w.Close()
-	rac := common.NewRestApiClient("POST", at.ts.URL+API_PATH_File_Upload, buf.Bytes(), true)
+	rar := common.NewRestApiRequest("POST", at.ts.URL+API_PATH_File_Upload, buf.Bytes())
 	ct := w.FormDataContentType()
 	t.Log(ct)
-	rac.SetHeader("Content-Type", ct)
-	resp, err := rac.Do()
+	rar.Request.Header.Set("Content-Type", ct)
+	resp, err := rac.Do(rar)
 	if err != nil {
 		t.Fatal(err)
 	}

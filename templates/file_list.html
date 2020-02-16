@@ -1,0 +1,19 @@
+{{define "content"}}
+<div class="container">
+    <table class="table">
+        <tr>
+            <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th>
+        </tr>
+        {{range .Directories}}
+        <tr>
+            <td><a style="color:blue" href="{{directoryUrl .Name}}">{{.Name}}</a></td> <td></td><td>folder</td> <th>{{.Is_hidden}}</th><td></td><td>{{formatTime .Insert_time ""}}</td><td></td><td>{{.User_name}}</td>
+        </tr>
+        {{end}}
+        {{range .Files}}
+        <tr>
+            <td><a style="color:blue" href="{{detailUrl .Id}}">{{.Name}}</a></td><td>{{.Description}}</td><td>file</td><th>{{.Is_hidden}}</th> <td>{{.Size}}</td><td>{{formatTime .InsertTime ""}}</td><td>{{.Completed}}</td><td>{{.UserName}}</td>
+        </tr>
+        {{end}}
+    </table>
+</div>
+{{end}}
