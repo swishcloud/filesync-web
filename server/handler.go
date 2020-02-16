@@ -177,7 +177,9 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 		ctx.FuncMap["directoryUrl"] = func(dir_name string) (string, error) {
 			p := path + "/" + dir_name
 			p = strings.TrimPrefix(p, "/")
-			return Path_File_List + "?path=" + p, nil
+			parameters := url.Values{}
+			parameters.Add("path", p)
+			return Path_File_List + "?" + parameters.Encode(), nil
 		}
 		ctx.FuncMap["isHidden"] = func(isHidden bool) (string, error) {
 			if isHidden {
