@@ -57,6 +57,7 @@ const (
 	Path_Download_File  = "/file/download"
 	Path_Server         = "/server"
 	Path_Server_Edit    = "/server_edit"
+	Path_Directory      = "/directory"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
@@ -76,6 +77,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.DELETE(Path_Server, s.serverDeleteHandler())
 	root.GET(Path_Server_Edit, s.serverEditHandler())
 	root.POST(Path_Server_Edit, s.serverEditPostHandler())
+	root.DELETE(Path_Directory, s.directoryDeleteHandler())
 }
 func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
@@ -88,6 +90,13 @@ func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 			return Path_Server_Edit + p, nil
 		}
 		ctx.RenderPage(s.newPageModel(ctx, servers), "templates/layout.html", "templates/server.html")
+	}
+}
+func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		s.GetStorage(ctx).DeleteDirectory(id)
+		ctx.Success(nil)
 	}
 }
 func (s *FileSyncWebServer) serverDeleteHandler() goweb.HandlerFunc {
@@ -167,10 +176,11 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 		files := s.GetStorage(ctx).GetFiles(directory.Id)
 		directories := s.GetStorage(ctx).GetDirectories(directory.Id)
 		data := struct {
-			Path        string
-			Files       []models.File
-			Directories []models.Directory
-		}{Path: path, Files: files, Directories: directories}
+			Path             string
+			Files            []models.File
+			Directories      []models.Directory
+			DirectoryUrlPath string
+		}{Path: path, Files: files, Directories: directories, DirectoryUrlPath: Path_Directory}
 		ctx.FuncMap["detailUrl"] = func(id string) (string, error) {
 			return Path_File + "?id=" + id, nil
 		}

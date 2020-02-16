@@ -2,18 +2,39 @@
 <div class="container">
     <table class="table">
         <tr>
-            <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th>
+            <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th><th>#</th>
         </tr>
         {{range .Directories}}
-        <tr>
-            <td><a style="color:blue" href="{{directoryUrl .Name}}">{{.Name}}</a></td> <td></td><td>folder</td> <th>{{.Is_hidden}}</th><td></td><td>{{formatTime .Insert_time ""}}</td><td></td><td>{{.User_name}}</td>
+        <tr id={{.Id}}>
+            <td><a style="color:blue" href="{{directoryUrl .Name}}">{{.Name}}</a></td> <td></td><td>folder</td> <th>{{.Is_hidden}}</th><td></td><td>{{formatTime .Insert_time ""}}</td><td></td><td>{{.User_name}}</td><td><button class="btn btn-danger directory-remove">remove</button></td>
         </tr>
         {{end}}
         {{range .Files}}
         <tr>
-            <td><a style="color:blue" href="{{detailUrl .Id}}">{{.Name}}</a></td><td>{{.Description}}</td><td>file</td><th>{{.Is_hidden}}</th> <td>{{.Size}}</td><td>{{formatTime .InsertTime ""}}</td><td>{{.Completed}}</td><td>{{.UserName}}</td>
+            <td><a style="color:blue" href="{{detailUrl .Id}}">{{.Name}}</a></td><td>{{.Description}}</td><td>file</td><th>{{.Is_hidden}}</th> <td>{{.Size}}</td><td>{{formatTime .InsertTime ""}}</td><td>{{.Completed}}</td><td>{{.UserName}}</td><td></td>
         </tr>
         {{end}}
     </table>
 </div>
+{{end}}
+{{define "scripts"}}
+<script>
+    var delete_directory_url="{{.DirectoryUrlPath}}"
+    $(".directory-remove").on("click",function(){
+        if(confirm("are you sure to delete this directory?")){
+            let id=$(this).parents("tr").attr("id")
+            $.ajax({
+            url: delete_directory_url+"?id="+id,
+            type: 'DELETE',
+            success: function(result) {
+                if(result.error==null){
+                    document.location.reload(true)
+                }else{
+                    alert(result.error)
+                }
+             }
+        })
+        }
+    })
+</script>
 {{end}}

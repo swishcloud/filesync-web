@@ -27,5 +27,6 @@ type Storage interface {
 	DeleteServer(id string)
 	GetDirectory(path string, user_id string) *models.Directory
 	AddDirectory(path string, name string, user_id string, is_hidden bool)
+	DeleteDirectory(id string)
 	SetFileHidden(file_id string, is_hidden bool)
 }

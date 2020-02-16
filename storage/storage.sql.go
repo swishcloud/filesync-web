@@ -265,7 +265,7 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
 
 func (m *SQLManager) GetDirectory(path string, user_id string) *models.Directory {
 	query := `WITH RECURSIVE CTE(id,p_id,name,path)as(
-		select id,p_id,name,cast (name as text) as path  from directory  where user_id=$1 and name=''
+		select id,p_id,name,cast (name as text) as path  from directory  where is_deleted=false and user_id=$1 and name=''
 		UNION ALL select directory.id,directory.p_id,directory.name,path || '/' || directory.name from CTE 
 		INNER JOIN directory ON CTE.id=directory.p_id
 		where $2 like path || '%'
@@ -312,6 +312,9 @@ func (m *SQLManager) AddDirectory(path string, name string, user_id string, is_h
 		VALUES ($1,$2,$3,$4,$5,$6,$7);`
 	m.Tx.MustExec(insert, uuid.New(), name, time.Now().UTC(), false, directory_id, user_id, is_hidden)
 }
+func (m *SQLManager) DeleteDirectory(id string) {
+	m.Tx.MustExec("update directory set is_deleted=true where id=$1", id)
+}
 func (m *SQLManager) SetFileHidden(file_id string, is_hidden bool) {
-	m.Tx.Exec("update file set is_hidden=$1 where id=$2", is_hidden, file_id)
+	m.Tx.MustExec("update file set is_hidden=$1 where id=$2", is_hidden, file_id)
 }
