@@ -22,6 +22,7 @@ const (
 	API_PATH_Exchange_Token = "/api/exchange_token"
 	API_PATH_Auth_Code_Url  = "/api/auth_code_url"
 	API_PATH_Directory      = "/api/directory"
+	API_PATH_Log            = "/api/log"
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
@@ -30,6 +31,7 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.GET(API_PATH_File, s.fileApiGetHandler())
 	group.POST(API_PATH_File, s.fileApiPostHandler())
 	group.PUT(API_PATH_File, s.fileApiPutHandler())
+	group.DELETE(API_PATH_File, s.fileApiDeleteHandler())
 	group.GET(API_PATH_File_Block, s.fileBlockApiGetHandler())
 	group.POST(API_PATH_File_Block, s.fileBlockApiPostHandler())
 	group.POST(API_PATH_Login, s.fileBlockApiPostHandler())
@@ -37,6 +39,7 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.GET(API_PATH_Auth_Code_Url, s.authCodeURLApiGetHandler())
 	group.POST(API_PATH_Directory, s.directoryApiPostHandler())
 	group.GET(API_PATH_Directory, s.directoryApiGetHandler())
+	group.GET(API_PATH_Log, s.logApiGetHandler())
 }
 
 func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
@@ -90,7 +93,7 @@ func (s *FileSyncWebServer) fileUploadApiPostHandler() goweb.HandlerFunc {
 			panic(err)
 		}
 		io.Copy(out, file)
-		s.GetStorage(ctx).InsertFileInfo(uuid, fileHeader.Filename, uuid, "file_size", "directory_id", false)
+		s.GetStorage(ctx).InsertFileInfo(uuid, fileHeader.Filename, uuid, "file_size", nil, false)
 		ctx.Writer.WriteHeader(204)
 	}
 }
@@ -98,20 +101,22 @@ func (s *FileSyncWebServer) fileUploadApiPostHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) fileApiGetHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		file_id := ctx.Request.URL.Query().Get("file_id")
-		name := ctx.Request.URL.Query().Get("name")
-		is_hidden, err := strconv.ParseBool(ctx.Request.FormValue("is_hidden"))
-		if err != nil {
-			panic(err)
-		}
 		var data *models.ServerFile
 		if file_id != "" {
 			data = s.GetStorage(ctx).GetServerFileByFileId(file_id)
 		} else {
-			md5 := ctx.Request.URL.Query().Get("md5")
+			name := ctx.Request.URL.Query().Get("name")
+			is_hidden, err := strconv.ParseBool(ctx.Request.FormValue("is_hidden"))
+			if err != nil {
+				panic(err)
+			}
 			directory_path := ctx.Request.URL.Query().Get("directory_path")
-			data = s.GetStorage(ctx).GetServerFile(md5, name, directory_path, s.MustGetLoginUser(ctx).Id)
-			if data != nil && data.Is_hidden != is_hidden {
-				s.GetStorage(ctx).SetFileHidden(data.File_id, is_hidden)
+			directory := s.GetStorage(ctx).GetDirectory(directory_path, s.MustGetLoginUser(ctx).Id)
+			if directory != nil {
+				data = s.GetStorage(ctx).GetServerFile(name, directory.Id, s.MustGetLoginUser(ctx).Id)
+				if data != nil && data.Is_hidden != is_hidden {
+					s.GetStorage(ctx).SetFileHidden(data.File_id, is_hidden)
+				}
 			}
 		}
 		ctx.Success(data)
@@ -129,7 +134,7 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 			panic(err)
 		}
 		directory := s.GetStorage(ctx).GetDirectory(directory_path, s.MustGetLoginUser(ctx).Id)
-		s.GetStorage(ctx).InsertFileInfo(md5, name, s.MustGetLoginUser(ctx).Id, size, directory.Id, is_hidden)
+		s.GetStorage(ctx).InsertFileInfo(md5, name, s.MustGetLoginUser(ctx).Id, size, &directory.Id, is_hidden)
 		ctx.Success(nil)
 	}
 }
@@ -138,6 +143,13 @@ func (s *FileSyncWebServer) fileApiPutHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		server_file_id := ctx.Request.FormValue("server_file_id")
 		s.GetStorage(ctx).CompleteServerFile(server_file_id)
+		ctx.Success(nil)
+	}
+}
+func (s *FileSyncWebServer) fileApiDeleteHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("file_id")
+		s.GetStorage(ctx).DeleteFile(id, s.MustGetLoginUser(ctx).Id)
 		ctx.Success(nil)
 	}
 }
@@ -168,7 +180,10 @@ func (s *FileSyncWebServer) fileBlockApiPostHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) loginApiPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-
+		state := ctx.Request.FormValue("state")
+		s.oAuth2Config.RedirectURL = s.config.OAuth.NativeAppRedirectURL
+		url := s.oAuth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+		ctx.Success(url)
 	}
 }
 
@@ -180,7 +195,7 @@ func (s *FileSyncWebServer) exchangeTokenApiPostHandler() goweb.HandlerFunc {
 		if err != nil {
 			panic(err)
 		}
-		ctx.Success(token.AccessToken)
+		ctx.Success(token)
 	}
 }
 
@@ -190,5 +205,16 @@ func (s *FileSyncWebServer) authCodeURLApiGetHandler() goweb.HandlerFunc {
 		s.oAuth2Config.RedirectURL = s.config.OAuth.NativeAppRedirectURL
 		url := s.oAuth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 		ctx.Success(url)
+	}
+}
+
+func (s *FileSyncWebServer) logApiGetHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		start_number, err := strconv.ParseInt(ctx.Request.FormValue("start"), 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		log := s.GetStorage(ctx).GetLogs(start_number, s.MustGetLoginUser(ctx).Id)
+		ctx.Success(log)
 	}
 }

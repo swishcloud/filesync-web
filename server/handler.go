@@ -95,7 +95,7 @@ func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		id := ctx.Request.FormValue("id")
-		s.GetStorage(ctx).DeleteDirectory(id)
+		s.GetStorage(ctx).DeleteDirectory(id, s.MustGetLoginUser(ctx).Id)
 		ctx.Success(nil)
 	}
 }
@@ -151,7 +151,7 @@ func (s *FileSyncWebServer) authenticateHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		directory := s.GetStorage(ctx).GetDirectory("", s.MustGetLoginUser(ctx).Id)
-		files := s.GetStorage(ctx).GetFiles(directory.Id)
+		files := s.GetStorage(ctx).GetFiles(directory.Id, s.MustGetLoginUser(ctx).Id)
 		data := struct {
 			Files []models.File
 		}{Files: files}
@@ -165,7 +165,7 @@ func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		file_id := ctx.Request.FormValue("file_id")
-		s.GetStorage(ctx).DeleteFile(file_id)
+		s.GetStorage(ctx).DeleteFile(file_id, s.MustGetLoginUser(ctx).Id)
 		ctx.Success(nil)
 	}
 }
@@ -173,23 +173,18 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		path := ctx.Request.FormValue("path")
 		directory := s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id)
-		files := s.GetStorage(ctx).GetFiles(directory.Id)
-		directories := s.GetStorage(ctx).GetDirectories(directory.Id)
+		files := s.GetStorage(ctx).GetFiles(directory.Id, s.MustGetLoginUser(ctx).Id)
 		data := struct {
 			Path             string
 			Files            []models.File
-			Directories      []models.Directory
 			DirectoryUrlPath string
-		}{Path: path, Files: files, Directories: directories, DirectoryUrlPath: Path_Directory}
-		ctx.FuncMap["detailUrl"] = func(id string) (string, error) {
-			return Path_File + "?id=" + id, nil
-		}
-		ctx.FuncMap["directoryUrl"] = func(dir_name string) (string, error) {
-			p := path + "/" + dir_name
-			p = strings.TrimPrefix(p, "/")
-			parameters := url.Values{}
-			parameters.Add("path", p)
-			return Path_File_List + "?" + parameters.Encode(), nil
+		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory}
+		ctx.FuncMap["detailUrl"] = func(file models.File) (string, error) {
+			if file.Type == 1 {
+				return Path_File + "?id=" + file.Id, nil
+			} else {
+				return Path_File_List + "?path=" + strings.TrimPrefix(path+"/"+file.Name, "/"), nil
+			}
 		}
 		ctx.FuncMap["isHidden"] = func(isHidden bool) (string, error) {
 			if isHidden {

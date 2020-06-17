@@ -14,9 +14,10 @@ type File struct {
 	Name        string
 	UserName    string
 	User_id     string
-	Size        int64
-	Completed   bool
+	Size        *int64
+	Completed   *bool
 	Is_hidden   bool
+	Type        int
 }
 
 type FileBlock struct {
@@ -31,9 +32,10 @@ type FileBlock struct {
 type ServerFile struct {
 	Name           string
 	Path           string
+	Md5            string
 	File_id        string
 	Server_file_id string
-	Directory_id   string
+	P_id           *string
 	Insert_time    time.Time
 	Uploaded_size  int64
 	Is_completed   bool
@@ -59,4 +61,15 @@ type Directory struct {
 	User_id     string
 	User_name   string
 	Is_hidden   bool
+}
+type Log struct {
+	Insert_time time.Time
+	P_id        *string
+	Action      int
+	Number      int
+	File_id     string
+	File_type   int
+	File_name   string
+	File_md5    *string
+	File_size   *int64
 }

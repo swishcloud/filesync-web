@@ -4,14 +4,19 @@
         <tr>
             <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th><th>#</th>
         </tr>
-        {{range .Directories}}
-        <tr id={{.Id}}>
-            <td><a style="color:blue" href="{{directoryUrl .Name}}">{{.Name}}</a></td> <td></td><td>folder</td> <th>{{.Is_hidden}}</th><td></td><td>{{formatTime .Insert_time ""}}</td><td></td><td>{{.User_name}}</td><td><button class="btn btn-danger directory-remove">remove</button></td>
-        </tr>
-        {{end}}
         {{range .Files}}
-        <tr>
-            <td><a style="color:blue" href="{{detailUrl .Id}}">{{.Name}}</a></td><td>{{.Description}}</td><td>file</td><th>{{.Is_hidden}}</th> <td>{{.Size}}</td><td>{{formatTime .InsertTime ""}}</td><td>{{.Completed}}</td><td>{{.UserName}}</td><td></td>
+        <tr id={{.Id}}>
+            <td><a style="color:blue" href="{{detailUrl .}}">{{.Name}}</a></td><td>{{.Description}}</td>
+            <td>{{if eq .Type 1}}
+                file
+                {{else}}folder
+                {{end}}
+            <td>{{.Is_hidden}}</td> <td>{{.Size}}</td><td>{{formatTime .InsertTime ""}}</td><td>{{.Completed}}</td><td>{{.UserName}}</td>
+            <td>
+                {{if eq .Type 1}}
+                {{else}}<button class="btn btn-danger directory-remove">remove</button>
+                {{end}}
+            </td>
         </tr>
         {{end}}
     </table>

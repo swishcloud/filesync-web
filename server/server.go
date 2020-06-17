@@ -5,9 +5,14 @@ import (
 	"errors"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
+
+	"github.com/swishcloud/filesync/message"
 
 	"golang.org/x/oauth2"
 
@@ -15,6 +20,7 @@ import (
 
 	"github.com/swishcloud/filesync-web/storage"
 	"github.com/swishcloud/filesync-web/storage/models"
+	"github.com/swishcloud/filesync/session"
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/goweb"
 )
@@ -48,31 +54,55 @@ type FileSyncWebServer struct {
 	httpClient      *http.Client
 	rac             *common.RestApiClient
 }
+type TcpServer struct {
+	listenPort int
+	clients    []*client
+	connect    chan *session.Session
+	disconnect chan *session.Session
+	config     *Config
+}
+type client struct {
+	session *session.Session
+	class   int
+}
 
+func readConfig(configPath string) *Config {
+	b, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	config := new(Config)
+	err = yaml.Unmarshal(b, config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	config.upload_folder = config.FILE_LOCATION + "upload/"
+	err = os.MkdirAll(config.upload_folder, os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return config
+
+}
+func NewTcpServer(configPath string, port int) *TcpServer {
+	server := new(TcpServer)
+	server.config = readConfig(configPath)
+	server.clients = []*client{}
+	server.listenPort = port
+	server.connect = make(chan *session.Session)
+	server.disconnect = make(chan *session.Session)
+	return server
+}
 func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebServer {
 	s := new(FileSyncWebServer)
 	s.skip_tls_verify = skip_tls_verify
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
 	s.rac = common.NewRestApiClient(skip_tls_verify)
+	s.config = readConfig(configPath)
 	s.engine = goweb.Default()
 	s.engine.WM.HandlerWidget = &HandlerWidget{s: s}
-	b, err := ioutil.ReadFile(configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	s.config = new(Config)
-	err = yaml.Unmarshal(b, s.config)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	s.config.upload_folder = s.config.FILE_LOCATION + "upload/"
-	err = os.MkdirAll(s.config.upload_folder, os.ModePerm)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	s.oAuth2Config = &oauth2.Config{
 		ClientID:     s.config.OAuth.ClientId,
 		ClientSecret: s.config.OAuth.Secret,
@@ -83,6 +113,63 @@ func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebS
 		},
 	}
 	return s
+}
+
+func (s *TcpServer) Serve() {
+	// Listen on TCP port 2000 on all available unicast and
+	// anycast IP addresses of the local system.
+	l, err := net.Listen("tcp", ":"+strconv.Itoa(s.listenPort))
+	log.Println("accepting tcp connections on port", s.listenPort)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer l.Close()
+	// Handle the sessions in a new goroutine.
+	go s.serveSessions()
+	for {
+		// Wait for a connection.
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		s.connect <- session.NewSession(conn)
+	}
+}
+
+func (s *TcpServer) serveSessions() {
+	for {
+		select {
+		case connect := <-s.connect:
+			client := &client{session: connect, class: 1}
+			s.clients = append(s.clients, client)
+			s.serveClient(client)
+		case disconect := <-s.disconnect:
+			disconect.Close()
+			for index, item := range s.clients {
+				if item.session == disconect {
+					s.clients = append(s.clients[:index], s.clients[index+1:]...)
+					break
+				}
+			}
+		case _ = <-time.After(time.Second * 1):
+			for _, client := range s.clients {
+				msg := message.NewMessage(message.MT_SYNC)
+				storage := storage.NewSQLManager(s.config.DB_CONN_INFO)
+				msg.Header["max"] = storage.GetLogNextNumber() - 1
+				storage.Commit()
+				if err := client.session.Send(msg, nil); err != nil {
+					go func() {
+						s.disconnect <- client.session
+					}()
+				} else {
+					log.Println("notified a client")
+				}
+			}
+		}
+	}
+}
+func (s *TcpServer) serveClient(client *client) {
+
 }
 func (s *FileSyncWebServer) Serve() {
 	s.bindHandlers(s.engine.RouterGroup.Group())
@@ -136,7 +223,10 @@ func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 	m := ctx.Data["storage"]
 	if m != nil {
 		if ctx.Ok {
-			m.(storage.Storage).Commit()
+			err := m.(storage.Storage).Commit()
+			if err != nil {
+				log.Println(err)
+			}
 		} else {
 			m.(storage.Storage).Rollback()
 		}
