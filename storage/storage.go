@@ -7,12 +7,12 @@ import (
 type Storage interface {
 	Commit() error
 	Rollback() error
-	GetLogNextNumber() int64
-	InsertFile(name, userId string, file_info_id *string, p_id *string, is_hidden bool, t int)
-	InsertFileInfo(md5, name, userId, size string, p_id *string, is_hidden bool)
-	DeleteFile(id string, userId string)
+	DoFileActions(actions []models.FileAction, user_id string)
+	GetFileByPath(path string, user_id string) map[string]interface{}
+	GetFileInfo(md5 string) map[string]interface{}
+	InsertFileInfo(md5, userId string, size int64)
 	GetFile(id string) models.File
-	GetFiles(p_id, user_id string) []models.File
+	GetFiles(p_id, user_id string, revision int64) []models.File
 	GetDirectories(directory_id string) []models.Directory
 	GetFileBlocks(server_file_id string) []models.FileBlock
 	GetServerFileByFileId(file_id string) *models.ServerFile
@@ -26,9 +26,8 @@ type Storage interface {
 	AddServer(name, ip, port string)
 	UpdateServer(id, name, ip, port string)
 	DeleteServer(id string)
-	GetDirectory(path string, user_id string) *models.Directory
-	AddDirectory(path string, name string, user_id string, is_hidden bool)
-	DeleteDirectory(directory_id string, user_id string)
+	GetDirectory(path string, user_id string, revision int64) *models.Directory
+	DeleteFileOrDirectory(id string)
 	SetFileHidden(file_id string, is_hidden bool)
 	GetLogs(start int64, user_id string) (logs []models.Log)
 }

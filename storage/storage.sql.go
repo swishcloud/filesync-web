@@ -2,9 +2,12 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,48 +43,174 @@ func (m *SQLManager) Commit() error {
 func (m *SQLManager) Rollback() error {
 	return m.Tx.Rollback()
 }
+func (m *SQLManager) GetFileByPath(path string, user_id string) map[string]interface{} {
+	query := `
+WITH RECURSIVE CTE AS (
+    SELECT *,'' as path,0 as level from file where name='' and user_id=$1
+  UNION ALL
+    SELECT f.*,CTE.path || '/' || f.name,CTE.level+1 from file f
+	inner join CTE on f.p_id=CTE.id where f."end" is null and $2 like CTE.path || '/' || f.name || '%'
+  )
+SELECT * from CTE order by level desc limit 1;`
+	sr := ScanRows(m.Tx.MustQuery(query, user_id, path))
+	fmt.Println(sr)
+	if len(sr) > 1 {
+		panic("should only return one row data.")
+	} else {
+		return sr[0]
+	}
+}
+func (m *SQLManager) DoFileActions(actions []models.FileAction, user_id string) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			m.Rollback()
+			panic(err)
+		}
+	}()
+	m.Tx.MustExec(`LOCK TABLE file IN SHARE ROW EXCLUSIVE MODE;`)
+	row := m.Tx.MustQueryRow(`select max(a."max") from (select max(start) from file union select max("end") from file) a;`)
+	max := int64(-1)
+	row.MustScan(&max)
 
-var mutex = &sync.Mutex{}
-
-var number int64 = -1
-
-func (m *SQLManager) GetLogNextNumber() int64 {
-	if number == -1 {
-		query := `select max(number) from log`
-		row := m.Tx.MustQueryRow(query)
-		var n *int64
-		row.MustScan(&n)
-		if n == nil {
-			number = 0
+	d := NewFileManager(m, user_id, max+1)
+	for _, action := range actions {
+		longest_folder := ""
+		if action.Md5 == "" {
+			longest_folder = action.Path
 		} else {
-			number = *n + 1
+			regexp, err := regexp.Compile(".+/")
+			if err != nil {
+				panic(err)
+			}
+			longest_folder = strings.TrimRight(regexp.FindString(action.Path), "/")
+		}
+		dir := d.makeDirAll(longest_folder)
+		if action.Md5 != "" {
+			name := filepath.Base(action.Path)
+			d.insertFile(name, dir["id"].(string), action.Md5, false, 1)
 		}
 	}
-	return number
 }
 
-//action:1,add;2,modify;3,delete
-func (m *SQLManager) insertLog(file_id string, action int, user_id string, p_id *string) {
-	mutex.Lock()
-	m.Tx.MustExec(`INSERT INTO public.log(
-		id, insert_time, file_id, action, user_id,p_id,number)
-		VALUES ($1,$2, $3,$4, $5,$6,$7);`, uuid.New(), time.Now().UTC(), file_id, action, user_id, p_id, m.GetLogNextNumber())
-	number++
-	mutex.Unlock()
+type fileManager struct {
+	m        *SQLManager
+	user_id  string
+	revision int64
 }
 
-func (m *SQLManager) InsertFile(name, userId string, file_info_id *string, p_id *string, is_hidden bool, t int) {
+func NewFileManager(m *SQLManager, user_id string, revision int64) *fileManager {
+	d := new(fileManager)
+	d.m = m
+	d.user_id = user_id
+	d.revision = revision
+	return d
+}
+
+//insert a file if t value is 1,if t value is 2 insert a directory.
+func (d *fileManager) insertFile(name, p_id, md5 string, is_hidden bool, t int) {
+	if t != 1 && t != 2 {
+		panic("the file type can only be 1 or 2.")
+	}
+	file_info_id := new(string)
+	if md5 != "" {
+		file_info := d.m.GetFileInfo(md5)
+		if file_info == nil {
+			panic("the file does not exits for md5 " + md5)
+		}
+		*file_info_id = file_info["id"].(string)
+	} else {
+		file_info_id = nil
+	}
+
+	if t == 1 {
+		query := `select * from file where p_id=$1 and name=$2 and "end" is null`
+		file := d.m.Tx.ScanRow(query, p_id, name)
+		if file != nil {
+			if file["file_info_id"].(string) != *file_info_id || file["is_hidden"].(string) != strconv.FormatBool(is_hidden) {
+				d.m.Tx.MustExec(`update file set "end"=$1 where id=$2`, d.revision, file["id"].(string))
+			} else {
+				//the file already exists,just return.
+				return
+			}
+		}
+	}
 	insert_file := `INSERT INTO public.file(
-		id, insert_time, name, description, user_id, file_info_id,is_deleted,p_id,is_hidden,type)
-		VALUES ($1, $2, $3, $4, $5, $6,$7,$8,$9,$10);`
+		id, insert_time, name, description, user_id, file_info_id,is_deleted,p_id,is_hidden,type,start)
+		VALUES ($1, $2, $3, $4, $5, $6,$7,$8,$9,$10,$11);`
 	id := uuid.New().String()
-	m.Tx.MustExec(insert_file, id, time.Now().UTC(), name, "", userId, file_info_id, false, p_id, is_hidden, t)
-	m.insertLog(id, 1, userId, p_id)
+	var stored_p_id *string
+	if p_id == "" || name == "" {
+		if p_id != "" || name != "" || t != 2 {
+			panic("parameters error.if add a root folder for a new user,then both p_id and name must be empty value.")
+		}
+		stored_p_id = nil
+	} else {
+		stored_p_id = &p_id
+	}
+	d.m.Tx.MustExec(insert_file, id, time.Now().UTC(), name, "", d.user_id, file_info_id, false, stored_p_id, is_hidden, t, strconv.FormatInt(d.revision, 10))
 }
+func (d *fileManager) makeDirAll(path string) map[string]interface{} {
+	for {
+		file := d.m.GetFileByPath(path, d.user_id)
+		p := file["path"].(string)
+		id := file["id"].(string)
+		if p == "" {
+			p = "/"
+		}
+		if p != path {
+			fmt.Println("creating directory...")
+			name := path[len(p):]
+			regexp, err := regexp.Compile("[^/]+")
+			if err != nil {
+				panic(err)
+			}
+			name = regexp.FindString(name)
+			d.insertFile(name, id, "", false, 2)
+		} else {
+			return file
+		}
+	}
+}
+
 func (m *SQLManager) GetServers() []models.Server {
 	return m.getServers("")
 }
-
+func (m *SQLManager) GetFileInfo(md5 string) map[string]interface{} {
+	query := `select a.*,b.id as server_file_id,b.uploaded_size,b.is_completed,b.server_id,c.ip,c.port from file_info a
+	inner join server_file b
+	on a.id=b.file_info_id 
+	inner join server c
+	on b.server_id=c.id where a.md5=$1`
+	return m.Tx.ScanRow(query, md5)
+}
+func ScanRows(rows *tx.Rows) []map[string]interface{} {
+	result := []map[string]interface{}{}
+	columns, err := rows.ColumnTypes()
+	args := make([]interface{}, len(columns))
+	for i, _ := range args {
+		zero_str_p := new(string)
+		args[i] = &zero_str_p
+	}
+	if err != nil {
+		panic(err)
+	}
+	for rows.Next() {
+		rows.MustScan(args...)
+		m := map[string]interface{}{}
+		for i, _ := range args {
+			val := *args[i].(**string)
+			if val == nil {
+				m[columns[i].Name()] = nil
+			} else {
+				m[columns[i].Name()] = *val
+			}
+		}
+		result = append(result, m)
+	}
+	rows.Close()
+	return result
+}
 func (m *SQLManager) getServers(where string, args ...interface{}) []models.Server {
 	query := `SELECT id, name, ip, port
 	FROM public.server ` + where
@@ -125,51 +254,68 @@ func (m *SQLManager) UpdateServer(id, name, ip, port string) {
 	SET name=$2, ip=$3, port=$4
 	WHERE id=$1;`, id, name, ip, port)
 }
-func (m *SQLManager) InsertFileInfo(md5, name, userId, size string, p_id *string, is_hidden bool) {
-	query_file_info := `SELECT id
-	FROM public.file_info where md5=$1;`
-	file_info_id := ""
-	file_info_row := m.Tx.MustQueryRow(query_file_info, md5)
-	err := file_info_row.Scan(&file_info_id)
-	if err != nil {
-		if err != sql.ErrNoRows {
-			panic(err)
-		}
-	} else {
-		m.InsertFile(name, userId, &file_info_id, p_id, is_hidden, 1)
-		return
-	}
-	file_info_id = uuid.New().String()
-	m.Tx.MustExec("INSERT INTO public.file_info( 	id, insert_time, md5, path, user_id,size) 	VALUES ($1, $2, $3, $4, $5,$6);", file_info_id, time.Now().UTC(), md5, uuid.New(), userId, size)
 
-	m.InsertFile(name, userId, &file_info_id, p_id, is_hidden, 1)
+// func (m *SQLManager) InsertFileInfo(md5, name, userId, size string, p_id *string, is_hidden bool) {
+// 	query_file_info := `SELECT id
+// 	FROM public.file_info where md5=$1;`
+// 	file_info_id := ""
+// 	file_info_row := m.Tx.MustQueryRow(query_file_info, md5)
+// 	err := file_info_row.Scan(&file_info_id)
+// 	if err != nil {
+// 		if err != sql.ErrNoRows {
+// 			panic(err)
+// 		}
+// 	} else {
+// 		m.InsertFile(name, userId, &file_info_id, p_id, is_hidden, 1)
+// 		return
+// 	}
+// 	file_info_id = uuid.New().String()
+// 	m.Tx.MustExec("INSERT INTO public.file_info( 	id, insert_time, md5, path, user_id,size) 	VALUES ($1, $2, $3, $4, $5,$6);", file_info_id, time.Now().UTC(), md5, uuid.New(), userId, size)
+
+// 	m.InsertFile(name, userId, &file_info_id, p_id, is_hidden, 1)
+
+// 	add_server_file := "INSERT INTO public.server_file(id, file_info_id, insert_time, uploaded_size, is_completed, server_id)VALUES ($1,$2,$3,$4,$5,$6);"
+// 	servers := m.GetServers()
+// 	if len(servers) == 0 {
+// 		panic("not found any server node exists")
+// 	}
+// 	_ = m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, servers[0].Id)
+// }
+func (m *SQLManager) InsertFileInfo(md5, userId string, size int64) {
+	file_info_id := uuid.New().String()
+	m.Tx.MustExec("INSERT INTO public.file_info( 	id, insert_time, md5, path, user_id,size) 	VALUES ($1, $2, $3, $4, $5,$6);", file_info_id, time.Now().UTC(), md5, uuid.New(), userId, size)
 
 	add_server_file := "INSERT INTO public.server_file(id, file_info_id, insert_time, uploaded_size, is_completed, server_id)VALUES ($1,$2,$3,$4,$5,$6);"
 	servers := m.GetServers()
 	if len(servers) == 0 {
 		panic("not found any server node exists")
 	}
-	_ = m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, servers[0].Id)
+	m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, servers[0].Id)
 }
-
-func (m *SQLManager) DeleteFile(id string, userId string) {
-	m.Tx.MustExec("update public.file set is_deleted=true WHERE id=$1;", id)
-	m.insertLog(id, 2, userId, nil)
-
+func (m *SQLManager) DeleteFileOrDirectory(id string) {
+	m.Tx.MustQuery(`call delete_file_or_directory($1);`, id)
 }
 func (m *SQLManager) GetFile(id string) models.File {
-	files := m.getFiles("where id=$1", id)
+	files := m.getFiles("where file.id=$1", id)
 	if len(files) == 1 {
 		return files[0]
 	} else {
 		panic("not found")
 	}
 }
-func (m *SQLManager) GetFiles(p_id, user_id string) []models.File {
+func (m *SQLManager) GetFiles(p_id, user_id string, revision int64) []models.File {
 	if p_id == "" {
-		return m.getFiles(" where is_deleted=false and p_id is null and file.user_id=$1", user_id)
+		if revision == -1 {
+			return m.getFiles(` where is_deleted=false and p_id is null and file.user_id=$1 and "end" is null`, user_id)
+		} else {
+			return m.getFiles(` where is_deleted=false and p_id is null and file.user_id=$1 and start<=$2 and ("end" is null or "end">$2)`, user_id, revision)
+		}
 	} else {
-		return m.getFiles(" where is_deleted=false and p_id=$1 and file.user_id=$2", p_id, user_id)
+		if revision == -1 {
+			return m.getFiles(` where is_deleted=false and p_id=$1 and file.user_id=$2 and "end" is null`, p_id, user_id)
+		} else {
+			return m.getFiles(` where is_deleted=false and p_id=$1 and file.user_id=$2 and start<=$3 and ("end" is null or "end">$3)`, p_id, user_id, revision)
+		}
 	}
 }
 func (m *SQLManager) GetDirectories(directory_id string) []models.Directory {
@@ -205,7 +351,7 @@ func (m *SQLManager) GetFileBlocks(server_file_id string) []models.FileBlock {
 	return fileBblocks
 }
 func (m *SQLManager) getFiles(where string, args ...interface{}) []models.File {
-	var sql = `SELECT file.id,file.is_hidden, file.insert_time, file.name,file.type,description, public.user.name,file_info.size,server_file.is_completed
+	var sql = `SELECT file.id,file.user_id,file.start,file.is_hidden, file.insert_time, file.name,file.type,description, public.user.name,file_info.size,server_file.is_completed
 	  FROM file inner join public.user on file.user_id=public.user.id
 	  left join file_info on file.file_info_id=file_info.id
 	  left join server_file on file_info.id=server_file.file_info_id `
@@ -214,7 +360,7 @@ func (m *SQLManager) getFiles(where string, args ...interface{}) []models.File {
 	files := []models.File{}
 	for rows.Next() {
 		file := &models.File{}
-		rows.MustScan(&file.Id, &file.Is_hidden, &file.InsertTime, &file.Name, &file.Type, &file.Description, &file.UserName, &file.Size, &file.Completed)
+		rows.MustScan(&file.Id, &file.User_id, &file.Start, &file.Is_hidden, &file.InsertTime, &file.Name, &file.Type, &file.Description, &file.UserName, &file.Size, &file.Completed)
 		files = append(files, *file)
 	}
 	return files
@@ -227,7 +373,7 @@ func (m *SQLManager) GetServerFileByServerFileId(server_file_id string) *models.
 	return m.getServerFile("b.id=$1", server_file_id)
 }
 func (m *SQLManager) getServerFile(where string, args ...interface{}) *models.ServerFile {
-	var sqlstr = `SELECT a.md5,file.id,file.name,file.is_hidden,file.p_id,a.size,a.path,b.id,b.insert_time,b.uploaded_size,b.is_completed,c.name as server_name,c.ip,c.port
+	var sqlstr = `SELECT a.md5,file.id,file.name,file.is_hidden,file.p_id,a.size,a.path,b.id,file.insert_time,b.uploaded_size,b.is_completed,c.name as server_name,c.ip,c.port
 	from file_info as a 
 	inner join  server_file as b on a.id=b.file_info_id 
 	inner join  server as c on b.server_id=c.id 
@@ -259,10 +405,7 @@ func (m *SQLManager) AddFileBlock(server_file_id, name string, start, end int64)
 	var p_id *string = nil
 	m.Tx.MustExec("INSERT INTO public.file_block(id, server_file_id, p_id, start,\"end\",path) VALUES ($1,$2,$3,$4,$5,$6);",
 		uuid.New(), server_file_id, p_id, start, end, name)
-	server_file := m.GetServerFileByServerFileId(server_file_id)
-	if end > server_file.Uploaded_size {
-		m.Tx.MustExec("update server_file set uploaded_size=$1 where id=$2", end, server_file_id)
-	}
+	m.Tx.MustExec("update server_file set uploaded_size=$1 where id=$2 and $1>uploaded_size", end, server_file_id)
 }
 func (m *SQLManager) GetUserByOpId(op_id string) *models.User {
 	query := `SELECT id, name FROM public."user" where op_id=$1;`
@@ -286,7 +429,8 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
 			id, name, insert_time,op_id)
 			VALUES ($1, $2, $3,$4);`
 		m.Tx.MustExec(add, id, name, time.Now().UTC(), sub)
-		m.InsertFile("", id, nil, nil, false, 2)
+		d := NewFileManager(m, id, 0)
+		d.insertFile("", "", "", false, 2)
 	} else {
 		//update user name
 		update := `update public."user" set name=$1 where op_id=$2`
@@ -295,16 +439,25 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
 	}
 }
 
-func (m *SQLManager) GetDirectory(path string, user_id string) *models.Directory {
-	query := `WITH RECURSIVE CTE as(
-		select id,cast (name as text) as path,is_hidden from file where p_id is null and user_id=$1 and type=2 and is_deleted=false
-		UNION ALL select file.id,path || '/' || file.name,file.is_hidden from file inner join CTE on file.p_id=CTE.id where is_deleted=false
-		)select id,is_hidden from CTE where path=$2`
+func (m *SQLManager) GetDirectory(path string, user_id string, revision int64) *models.Directory {
+	var where string
+	var args []interface{}
 	p := path
 	if path != "" {
 		p = "/" + path
 	}
-	var row = m.Tx.MustQueryRow(query, user_id, p)
+	if revision == -1 {
+		where = ` where "end" is null `
+		args = []interface{}{user_id, p}
+	} else {
+		where = ` where is_deleted=false and start<=$3 and ("end" is null or "end">$3) `
+		args = []interface{}{user_id, p, revision}
+	}
+	query := `WITH RECURSIVE CTE as(
+		select id,cast (name as text) as path,is_hidden from file where p_id is null and user_id=$1 and type=2 and is_deleted=false
+		UNION ALL select file.id,path || '/' || file.name,file.is_hidden from file inner join CTE on file.p_id=CTE.id` + where + `)select id,is_hidden from CTE where path=$2`
+
+	var row = m.Tx.MustQueryRow(query, args...)
 	directory := new(models.Directory)
 	if err := row.Scan(&directory.Id, &directory.Is_hidden); err != nil {
 		if err != sql.ErrNoRows {
@@ -314,49 +467,6 @@ func (m *SQLManager) GetDirectory(path string, user_id string) *models.Directory
 		}
 	}
 	return directory
-}
-func (m *SQLManager) AddDirectory(path string, name string, user_id string, is_hidden bool) {
-	//check if this directory already exists
-	d := m.GetDirectory(strings.TrimPrefix(path+"/"+name, "/"), user_id)
-	if d != nil {
-		if d.Is_hidden != is_hidden {
-			m.Tx.Exec("update directory set is_hidden=$1 where id=$2", is_hidden, d.Id)
-		}
-		return
-	}
-	var directory_id *string
-	if name == "" && path == "" {
-		directory_id = nil
-	} else if name == "" && path != "" {
-		panic("bad request papameter errror")
-	} else {
-		directory := m.GetDirectory(path, user_id)
-		//this api does not allow inserting root directory
-		if directory == nil {
-			panic("parent directory not found")
-		}
-		directory_id = &directory.Id
-	}
-	m.InsertFile(name, user_id, nil, directory_id, false, 2)
-}
-func (m *SQLManager) DeleteDirectory(directory_id string, user_id string) {
-	rows := m.Tx.MustQuery(`WITH RECURSIVE CTE as(select * from file  where id=$1
-						  UNION ALL select f.* from file f inner join CTE on f.p_id=CTE.id )select id,p_id ,row_number() over () as n from CTE where is_deleted=false order by  n desc`, directory_id)
-	defer rows.Close()
-	arry := []map[string]interface{}{}
-	for rows.Next() {
-		m := map[string]interface{}{}
-		var id string
-		var p_id *string
-		var row_number int64
-		rows.MustScan(&id, &p_id, &row_number)
-		m["id"] = id
-		m["p_id"] = p_id
-		arry = append(arry, m)
-	}
-	for _, item := range arry {
-		m.DeleteFile(item["id"].(string), user_id)
-	}
 }
 func (m *SQLManager) SetFileHidden(file_id string, is_hidden bool) {
 	m.Tx.MustExec("update file set is_hidden=$1 where id=$2", is_hidden, file_id)

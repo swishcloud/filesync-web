@@ -18,8 +18,15 @@ type File struct {
 	Completed   *bool
 	Is_hidden   bool
 	Type        int
+	Start       *int64
 }
 
+type FileAction struct {
+	Path string
+	//action type:1 add.
+	ActionType int
+	Md5        string
+}
 type FileBlock struct {
 	Id             string
 	Server_file_id string

@@ -1,8 +1,24 @@
 {{define "content"}}
 <div class="container">
-   
+   <div>
+       <span>file size:</span>  <span>{{.ServerFile.Size}} bytes</span>
+   </div>
+   <div>
+       <span>upload time:</span>  <span>{{formatTime .File.InsertTime ""}}</span>
+   </div>
+   <div>
+       <span>user:</span>  <span>{{.File.UserName}}</span>
+   </div>
+   <div>
+       <span>description:</span>  <span>{{.File.Description}}</span>
+   </div>
+   <div>
+       <span>revision:</span>  <span>{{.File.Start}}</span>
+   </div>
     <a id="download" href="{{.DownloadUrl}}" class="text-primary">download</a>
+    {{if .CanDelete}}   
     <a id="delete" href="#" class="text-primary">delete</a>
+    {{end}}
 </div>
 {{end}}
 {{define "scripts"}}

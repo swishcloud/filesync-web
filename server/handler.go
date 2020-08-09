@@ -95,7 +95,7 @@ func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		id := ctx.Request.FormValue("id")
-		s.GetStorage(ctx).DeleteDirectory(id, s.MustGetLoginUser(ctx).Id)
+		s.GetStorage(ctx).DeleteFileOrDirectory(id)
 		ctx.Success(nil)
 	}
 }
@@ -140,6 +140,9 @@ func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 		ctx.Writer.EnsureInitialzed(true)
 		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
 			user := s.GetStorage(ctx).GetUserByOpId(session.Claims["sub"].(string))
+			if user == nil {
+				panic("no logged user")
+			}
 			ctx.Data["user"] = user
 		}
 	}
@@ -150,30 +153,26 @@ func (s *FileSyncWebServer) authenticateHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		directory := s.GetStorage(ctx).GetDirectory("", s.MustGetLoginUser(ctx).Id)
-		files := s.GetStorage(ctx).GetFiles(directory.Id, s.MustGetLoginUser(ctx).Id)
-		data := struct {
-			Files []models.File
-		}{Files: files}
-		ctx.FuncMap["detailUrl"] = func(id string) (string, error) {
-			return Path_File + "?id=" + id, nil
-		}
-		ctx.RenderPage(s.newPageModel(ctx, data), "templates/layout.html", "templates/index.html")
+		http.Redirect(ctx.Writer, ctx.Request, Path_File_List, 302)
 	}
 }
 
 func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		file_id := ctx.Request.FormValue("file_id")
-		s.GetStorage(ctx).DeleteFile(file_id, s.MustGetLoginUser(ctx).Id)
+		s.GetStorage(ctx).DeleteFileOrDirectory(file_id)
 		ctx.Success(nil)
 	}
 }
 func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		path := ctx.Request.FormValue("path")
-		directory := s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id)
-		files := s.GetStorage(ctx).GetFiles(directory.Id, s.MustGetLoginUser(ctx).Id)
+		revision, err := strconv.ParseInt(ctx.Request.FormValue("r"), 10, 64)
+		if err != nil {
+			revision = -1
+		}
+		directory := s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id, revision)
+		files := s.GetStorage(ctx).GetFiles(directory.Id, s.MustGetLoginUser(ctx).Id, revision)
 		data := struct {
 			Path             string
 			Files            []models.File
@@ -183,7 +182,7 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			if file.Type == 1 {
 				return Path_File + "?id=" + file.Id, nil
 			} else {
-				return Path_File_List + "?path=" + strings.TrimPrefix(path+"/"+file.Name, "/"), nil
+				return Path_File_List + "?path=" + strings.TrimPrefix(path+"/"+file.Name, "/") + "&r=" + strconv.FormatInt(revision, 10), nil
 			}
 		}
 		ctx.FuncMap["isHidden"] = func(isHidden bool) (string, error) {
@@ -200,20 +199,28 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		login_user, _ := s.GetLoginUser(ctx)
 		file_id := ctx.Request.FormValue("id")
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_id)
+		file := s.GetStorage(ctx).GetFile(file_id)
 		if server_file == nil {
 			panic("file not found")
 		}
 		ctx.FuncMap["downloadUrl"] = func() (string, error) {
 			return Path_Download_File + "/" + file_id + "/" + server_file.Name, nil
 		}
+		can_delete := false
+		if login_user != nil && login_user.Id == file.User_id {
+			can_delete = true
+		}
 		model := struct {
 			DownloadUrl string
 			DeleteUrl   string
 			FileId      string
+			File        models.File
 			ServerFile  models.ServerFile
-		}{DownloadUrl: Path_Download_File + "/" + file_id + "/" + server_file.Name, DeleteUrl: Path_File + "?file_id=" + file_id, ServerFile: *server_file, FileId: file_id}
+			CanDelete   bool
+		}{DownloadUrl: Path_Download_File + "/" + file_id + "/" + server_file.Name, DeleteUrl: Path_File + "?file_id=" + file_id, File: file, ServerFile: *server_file, FileId: file_id, CanDelete: can_delete}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
 }
@@ -230,7 +237,7 @@ func (s *FileSyncWebServer) loginHandler() goweb.HandlerFunc {
 	}
 }
 func (s *FileSyncWebServer) addOrUpdateUser(ctx *goweb.Context, token *oauth2.Token) {
-	rar := common.NewRestApiRequest("GET", s.config.OAuth.UserInfoURL, nil).UseToken(s.oAuth2Config, token)
+	rar := common.NewRestApiRequest("GET", s.config.OAuth.UserInfoURL, nil).SetAuthHeader(token)
 	resp, err := s.rac.Do(rar)
 	if err != nil {
 		panic(err)

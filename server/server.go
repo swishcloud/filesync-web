@@ -26,6 +26,7 @@ import (
 )
 
 type Config struct {
+	Listen_ip     string      `yaml:"listen_ip"`
 	FILE_LOCATION string      `yaml:"file_location"`
 	DB_CONN_INFO  string      `yaml:"db_conn_info"`
 	OAuth         ConfigOAuth `yaml:"oauth"`
@@ -155,7 +156,7 @@ func (s *TcpServer) serveSessions() {
 			for _, client := range s.clients {
 				msg := message.NewMessage(message.MT_SYNC)
 				storage := storage.NewSQLManager(s.config.DB_CONN_INFO)
-				msg.Header["max"] = storage.GetLogNextNumber() - 1
+				msg.Header["max"] = -1
 				storage.Commit()
 				if err := client.session.Send(msg, nil); err != nil {
 					go func() {
@@ -175,8 +176,8 @@ func (s *FileSyncWebServer) Serve() {
 	s.bindHandlers(s.engine.RouterGroup.Group())
 	apiGroup := s.engine.RouterGroup.Group()
 	s.bindApiHandlers(apiGroup)
-	addr := ":2002"
-	log.Println("listening on", addr)
+	addr := s.config.Listen_ip + ":2002"
+	log.Println("listening on https://" + addr)
 	err := http.ListenAndServeTLS(addr, s.config.Tls_cert_file, s.config.Tls_key_file, s.engine)
 	if err != nil {
 		log.Fatal(err)
