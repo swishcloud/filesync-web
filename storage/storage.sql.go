@@ -151,16 +151,10 @@ func (d *fileManager) insertFile(name, p_id, md5 string, is_hidden bool, t int) 
 	d.m.Tx.MustExec(insert_file, id, time.Now().UTC(), name, "", d.user_id, file_info_id, false, stored_p_id, is_hidden, t, strconv.FormatInt(d.revision, 10))
 }
 func (d *fileManager) makeDirAll(path string) map[string]interface{} {
-	if path == "/" {
-		return d.m.GetFileByPath(path, d.user_id)
-	}
 	for {
 		file := d.m.GetFileByPath(path, d.user_id)
 		p := file["path"].(string)
 		id := file["id"].(string)
-		if p == "" {
-			p = "/"
-		}
 		if p != path {
 			fmt.Println("creating directory...")
 			name := string([]rune(path)[len(p):])

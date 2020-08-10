@@ -182,7 +182,10 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			if file.Type == 1 {
 				return Path_File + "?id=" + file.Id, nil
 			} else {
-				return Path_File_List + "?path=" + strings.TrimPrefix(path+"/"+file.Name, "/") + "&r=" + strconv.FormatInt(revision, 10), nil
+				parameters := url.Values{}
+				parameters.Add("path", strings.TrimPrefix(path+"/"+file.Name, "/"))
+				parameters.Add("r", strconv.FormatInt(revision, 10))
+				return Path_File_List + "?" + parameters.Encode(), nil
 			}
 		}
 		ctx.FuncMap["isHidden"] = func(isHidden bool) (string, error) {
