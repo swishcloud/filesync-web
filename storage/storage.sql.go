@@ -44,6 +44,11 @@ func (m *SQLManager) Rollback() error {
 	return m.Tx.Rollback()
 }
 func (m *SQLManager) GetFileByPath(path string, user_id string) map[string]interface{} {
+	regexp, err := regexp.Compile("/")
+	if err != nil {
+		panic(err)
+	}
+	level := len(regexp.FindAllString(path, -1))
 	query := `
 WITH RECURSIVE CTE AS (
     SELECT *,'' as path,0 as level from file where name='' and user_id=$1
@@ -51,8 +56,8 @@ WITH RECURSIVE CTE AS (
     SELECT f.*,CTE.path || '/' || f.name,CTE.level+1 from file f
 	inner join CTE on f.p_id=CTE.id where f."end" is null and $2 like CTE.path || '/' || f.name || '%'
   )
-SELECT * from CTE order by level desc limit 1;`
-	sr := ScanRows(m.Tx.MustQuery(query, user_id, path))
+SELECT * from CTE where level<$3 or path=$2 order by level desc limit 1;`
+	sr := ScanRows(m.Tx.MustQuery(query, user_id, path, level))
 	fmt.Println(sr)
 	if len(sr) > 1 {
 		panic("should only return one row data.")
@@ -165,6 +170,9 @@ func (d *fileManager) makeDirAll(path string) map[string]interface{} {
 			name = regexp.FindString(name)
 			d.insertFile(name, id, "", false, 2)
 		} else {
+			if file["type"].(string) != "2" {
+				panic("There is already a file with the same path as you specified:" + path)
+			}
 			return file
 		}
 	}
