@@ -168,6 +168,7 @@ func (d *fileManager) makeDirAll(path string) map[string]interface{} {
 				panic(err)
 			}
 			name = regexp.FindString(name)
+			fmt.Println("found parent directory " + p + " for " + path + ",creating directory " + name + " under it.")
 			d.insertFile(name, id, "", false, 2)
 		} else {
 			if file["type"].(string) != "2" {
