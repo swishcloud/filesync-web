@@ -1,11 +1,16 @@
 {{define "content"}}
 <div class="container">
+    <div class="mb-3">
+        <a  class="btn btn-primary"href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
+        <a  class="btn btn-primary directory-move">move</a>
+    </div>
     <table class="table">
         <tr>
-            <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th><th>#</th>
+                <th><input type="checkbox"></th> <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th><th>#</th>
         </tr>
         {{range .Files}}
-        <tr id={{.Id}}>
+        <tr id={{.Id}} name="{{.Name}}">
+            <td><input type="checkbox"></td>
             <td><a style="color:blue" href="{{detailUrl .}}">{{.Name}}</a></td><td>{{.Description}}</td>
             <td>{{if eq .Type 1}}
                 file
@@ -40,6 +45,17 @@
              }
         })
         }
+    })
+    var file_move_path="{{.Path_File_Move}}"
+    $(".directory-move").on("click",function(){
+        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes,function(){
+            var directory="{{.File_Path}}"
+            var name=$(this).parents("tr").attr("name")
+            var url=file_move_path+"?directory="+directory+"&name="+name
+            document.location.href=url
+            return//just return,does not care other if any.
+        })
     })
 </script>
 {{end}}

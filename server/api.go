@@ -112,7 +112,7 @@ func (s *FileSyncWebServer) fileUploadApiPostHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) fileApiGetHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		file_id := ctx.Request.URL.Query().Get("file_id")
+		/* file_id := ctx.Request.URL.Query().Get("file_id")
 		var data *models.ServerFile
 		if file_id != "" {
 			data = s.GetStorage(ctx).GetServerFileByFileId(file_id)
@@ -135,7 +135,7 @@ func (s *FileSyncWebServer) fileApiGetHandler() goweb.HandlerFunc {
 				}
 			}
 		}
-		ctx.Success(data)
+		ctx.Success(data) */
 	}
 }
 
@@ -172,8 +172,8 @@ func (s *FileSyncWebServer) fileApiPutHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) fileApiDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		id := ctx.Request.FormValue("file_id")
-		s.GetStorage(ctx).DeleteFileOrDirectory(id)
+		//id := ctx.Request.FormValue("file_id")
+		//s.GetStorage(ctx).DeleteFileOrDirectory(id)
 		ctx.Success(nil)
 	}
 }
@@ -234,11 +234,11 @@ func (s *FileSyncWebServer) authCodeURLApiGetHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) logApiGetHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		start_number, err := strconv.ParseInt(ctx.Request.FormValue("start"), 10, 64)
+		/* start_number, err := strconv.ParseInt(ctx.Request.FormValue("start"), 10, 64)
 		if err != nil {
 			panic(err)
 		}
 		log := s.GetStorage(ctx).GetLogs(start_number, s.MustGetLoginUser(ctx).Id)
-		ctx.Success(log)
+		ctx.Success(log) */
 	}
 }

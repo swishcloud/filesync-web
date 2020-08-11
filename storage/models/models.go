@@ -22,8 +22,9 @@ type File struct {
 }
 
 type FileAction struct {
-	Path string
-	//action type:1 add.
+	OldPath string
+	Path    string
+	//action type:1 add,2 delete
 	ActionType int
 	Md5        string
 }
@@ -42,7 +43,7 @@ type ServerFile struct {
 	Md5            string
 	File_id        string
 	Server_file_id string
-	P_id           *string
+	P_file_id      *string
 	Insert_time    time.Time
 	Uploaded_size  int64
 	Is_completed   bool
@@ -62,6 +63,8 @@ type Server struct {
 
 type Directory struct {
 	Id          string
+	File_id     string
+	P_file_id   *string
 	Name        string
 	Insert_time time.Time
 	P_id        string

@@ -50,6 +50,8 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 const (
 	Path_Index          = "/"
 	Path_File           = "/file"
+	Path_File_Edit      = "/file_edit"
+	Path_File_Move      = "/file_move"
 	Path_File_List      = "/file/list"
 	Path_Login          = "/login"
 	Path_Login_Callback = "/login-callback"
@@ -78,6 +80,50 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_Server_Edit, s.serverEditHandler())
 	root.POST(Path_Server_Edit, s.serverEditPostHandler())
 	root.DELETE(Path_Directory, s.directoryDeleteHandler())
+	root.GET(Path_File_Edit, s.fileEditHandler())
+	root.POST(Path_File_Edit, s.fileEditPostHandler())
+	root.GET(Path_File_Move, s.fileMoveHandler())
+	root.POST(Path_File_Move, s.fileMovePostHandler())
+}
+func (s *FileSyncWebServer) fileEditHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/file_edit.html")
+	}
+}
+func (s *FileSyncWebServer) fileEditPostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		name := ctx.Request.FormValue("name")
+		_ = name
+		path := ctx.Request.FormValue("path")
+		actions := []models.FileAction{}
+		action := models.FileAction{}
+		action.Path = path
+		action.ActionType = 1
+		action.Md5 = ""
+		actions = append(actions, action)
+		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
+		ctx.Success(nil)
+	}
+}
+func (s *FileSyncWebServer) fileMoveHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/file_move.html")
+	}
+}
+func (s *FileSyncWebServer) fileMovePostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		from := ctx.Request.FormValue("from")
+		to := ctx.Request.FormValue("to")
+		actions := []models.FileAction{}
+		action := models.FileAction{}
+		action.Path = to
+		action.OldPath = from
+		action.ActionType = 1
+		action.Md5 = ""
+		actions = append(actions, action)
+		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
+		ctx.Success(nil)
+	}
 }
 func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
@@ -94,8 +140,14 @@ func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		id := ctx.Request.FormValue("id")
-		s.GetStorage(ctx).DeleteFileOrDirectory(id)
+		path := ctx.Request.FormValue("path")
+		actions := []models.FileAction{}
+		action := models.FileAction{}
+		action.Path = path
+		action.ActionType = 2
+		action.Md5 = ""
+		actions = append(actions, action)
+		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
 		ctx.Success(nil)
 	}
 }
@@ -159,8 +211,14 @@ func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		file_id := ctx.Request.FormValue("file_id")
-		s.GetStorage(ctx).DeleteFileOrDirectory(file_id)
+		path := ctx.Request.FormValue("path")
+		actions := []models.FileAction{}
+		action := models.FileAction{}
+		action.Path = path
+		action.ActionType = 2
+		action.Md5 = ""
+		actions = append(actions, action)
+		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
 		ctx.Success(nil)
 	}
 }
@@ -172,12 +230,18 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			revision = -1
 		}
 		directory := s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id, revision)
-		files := s.GetStorage(ctx).GetFiles(directory.Id, s.MustGetLoginUser(ctx).Id, revision)
+		if directory == nil {
+			panic("path does not exits")
+		}
+		files := s.GetStorage(ctx).GetFiles(directory.File_id, s.MustGetLoginUser(ctx).Id, revision)
 		data := struct {
 			Path             string
 			Files            []models.File
 			DirectoryUrlPath string
-		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory}
+			Path_File_Edit   string
+			Path_File_Move   string
+			File_Path        string
+		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, File_Path: "/" + path}
 		ctx.FuncMap["detailUrl"] = func(file models.File) (string, error) {
 			if file.Type == 1 {
 				return Path_File + "?id=" + file.Id, nil
