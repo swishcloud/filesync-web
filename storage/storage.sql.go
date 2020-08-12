@@ -285,33 +285,6 @@ func (m *SQLManager) UpdateServer(id, name, ip, port string) {
 	SET name=$2, ip=$3, port=$4
 	WHERE id=$1;`, id, name, ip, port)
 }
-
-// func (m *SQLManager) InsertFileInfo(md5, name, userId, size string, p_file_id *string, is_hidden bool) {
-// 	query_file_info := `SELECT id
-// 	FROM public.file_info where md5=$1;`
-// 	file_info_id := ""
-// 	file_info_row := m.Tx.MustQueryRow(query_file_info, md5)
-// 	err := file_info_row.Scan(&file_info_id)
-// 	if err != nil {
-// 		if err != sql.ErrNoRows {
-// 			panic(err)
-// 		}
-// 	} else {
-// 		m.InsertFile(name, userId, &file_info_id, p_file_id, is_hidden, 1)
-// 		return
-// 	}
-// 	file_info_id = uuid.New().String()
-// 	m.Tx.MustExec("INSERT INTO public.file_info( 	id, insert_time, md5, path, user_id,size) 	VALUES ($1, $2, $3, $4, $5,$6);", file_info_id, time.Now().UTC(), md5, uuid.New(), userId, size)
-
-// 	m.InsertFile(name, userId, &file_info_id, p_file_id, is_hidden, 1)
-
-// 	add_server_file := "INSERT INTO public.server_file(id, file_info_id, insert_time, uploaded_size, is_completed, server_id)VALUES ($1,$2,$3,$4,$5,$6);"
-// 	servers := m.GetServers()
-// 	if len(servers) == 0 {
-// 		panic("not found any server node exists")
-// 	}
-// 	_ = m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, servers[0].Id)
-// }
 func (m *SQLManager) InsertFileInfo(md5, userId string, size int64) {
 	file_info_id := uuid.New().String()
 	m.Tx.MustExec("INSERT INTO public.file_info( 	id, insert_time, md5, path, user_id,size) 	VALUES ($1, $2, $3, $4, $5,$6);", file_info_id, time.Now().UTC(), md5, uuid.New(), userId, size)
@@ -347,7 +320,7 @@ func (m *SQLManager) GetFiles(p_file_id, user_id string, revision int64) []model
 	}
 }
 func (m *SQLManager) GetFileBlocks(server_file_id string) []models.FileBlock {
-	query := `SELECT id, server_file_id, p_file_id, "end", start, path
+	query := `SELECT id, server_file_id, p_id, "end", start, path
     FROM public.file_block where server_file_id=$1 order by "end" desc;`
 	rows := m.Tx.MustQuery(query, server_file_id)
 	fileBblocks := []models.FileBlock{}
