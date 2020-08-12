@@ -111,7 +111,7 @@ func (m *SQLManager) DoFileActions(actions []models.FileAction, user_id string) 
 		dir := d.makeDirAll(longest_folder, last_folder_id)
 		if action.Md5 != "" {
 			name := filepath.Base(action.Path)
-			d.insertFile(name, last_folder_id, dir["id"].(string), action.Md5, false, 1)
+			d.insertFile(name, last_folder_id, dir["file_id"].(string), action.Md5, false, 1)
 		}
 	}
 }
