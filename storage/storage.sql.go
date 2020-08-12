@@ -388,9 +388,9 @@ func (m *SQLManager) CompleteServerFile(server_file_id string) {
 	m.Tx.MustExec("update server_file set is_completed=true where id=$1", server_file_id)
 }
 func (m *SQLManager) AddFileBlock(server_file_id, name string, start, end int64) {
-	var p_file_id *string = nil
-	m.Tx.MustExec("INSERT INTO public.file_block(id, server_file_id, p_file_id, start,\"end\",path) VALUES ($1,$2,$3,$4,$5,$6);",
-		uuid.New(), server_file_id, p_file_id, start, end, name)
+	var p_id *string = nil
+	m.Tx.MustExec("INSERT INTO public.file_block(id, server_file_id, p_id, start,\"end\",path) VALUES ($1,$2,$3,$4,$5,$6);",
+		uuid.New(), server_file_id, p_id, start, end, name)
 	m.Tx.MustExec("update server_file set uploaded_size=$1 where id=$2 and $1>uploaded_size", end, server_file_id)
 }
 func (m *SQLManager) GetUserByOpId(op_id string) *models.User {
