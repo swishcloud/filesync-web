@@ -12,6 +12,7 @@ type File struct {
 	InsertTime  time.Time
 	Description string
 	Name        string
+	Md5         *string
 	UserName    string
 	User_id     string
 	Size        *int64
@@ -24,9 +25,11 @@ type File struct {
 type FileAction struct {
 	OldPath string
 	Path    string
-	//action type:1 add,2 delete
+	//action type:1 add,2 delete,3 rename
 	ActionType int
-	Md5        string
+	//file type:1 file,2 directory
+	FileType int
+	Md5      string
 }
 type FileBlock struct {
 	Id             string

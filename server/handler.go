@@ -99,6 +99,7 @@ func (s *FileSyncWebServer) fileEditPostHandler() goweb.HandlerFunc {
 		action := models.FileAction{}
 		action.Path = path
 		action.ActionType = 1
+		action.FileType = 2
 		action.Md5 = ""
 		actions = append(actions, action)
 		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
@@ -118,7 +119,12 @@ func (s *FileSyncWebServer) fileMovePostHandler() goweb.HandlerFunc {
 		action := models.FileAction{}
 		action.Path = to
 		action.OldPath = from
-		action.ActionType = 1
+		file_type, err := strconv.Atoi(ctx.Request.FormValue("file_type"))
+		if err != nil {
+			panic(err)
+		}
+		action.FileType = file_type
+		action.ActionType = 3
 		action.Md5 = ""
 		actions = append(actions, action)
 		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
@@ -145,6 +151,7 @@ func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 		action := models.FileAction{}
 		action.Path = path
 		action.ActionType = 2
+		action.FileType = 2
 		action.Md5 = ""
 		actions = append(actions, action)
 		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
@@ -192,9 +199,6 @@ func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 		ctx.Writer.EnsureInitialzed(true)
 		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
 			user := s.GetStorage(ctx).GetUserByOpId(session.Claims["sub"].(string))
-			if user == nil {
-				panic("no logged user")
-			}
 			ctx.Data["user"] = user
 		}
 	}

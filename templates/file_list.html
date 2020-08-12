@@ -9,7 +9,7 @@
                 <th><input type="checkbox"></th> <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th><th>#</th>
         </tr>
         {{range .Files}}
-        <tr id={{.Id}} name="{{.Name}}">
+        <tr id={{.Id}} file_type={{.Type}} name="{{.Name}}">
             <td><input type="checkbox"></td>
             <td><a style="color:blue" href="{{detailUrl .}}">{{.Name}}</a></td><td>{{.Description}}</td>
             <td>{{if eq .Type 1}}
@@ -32,9 +32,19 @@
     var delete_directory_url="{{.DirectoryUrlPath}}"
     $(".directory-remove").on("click",function(){
         if(confirm("are you sure to delete this directory?")){
-            let id=$(this).parents("tr").attr("id")
+            let name=$(this).parents("tr").attr("name")
+            var directory="{{.File_Path}}"
+            if (directory=="/"){
+                path=directory+name
+            }else{
+                path=directory+"/"+name
+            }
+            var parameters={
+                path:path
+            }
+            debugger
             $.ajax({
-            url: delete_directory_url+"?id="+id,
+            url: delete_directory_url+"?"+$.param(parameters),
             type: 'DELETE',
             success: function(result) {
                 if(result.error==null){
@@ -52,7 +62,13 @@
         $.each(checked_boxes,function(){
             var directory="{{.File_Path}}"
             var name=$(this).parents("tr").attr("name")
-            var url=file_move_path+"?directory="+directory+"&name="+name
+            var file_type=$(this).parents("tr").attr("file_type")
+            var parameters={
+                directory:directory,
+                name:name,
+                file_type:file_type
+            }
+            var url=file_move_path+"?"+$.param(parameters)
             document.location.href=url
             return//just return,does not care other if any.
         })

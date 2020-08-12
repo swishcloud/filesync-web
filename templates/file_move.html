@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="container">
         <form method="post" class="col-lg-4" >
-                <input type="hidden" id="path" name="path">
+                <input type="hidden" id="file_type" name="file_type">
                 <div id="error">
                 </div>
                 <div class="form-group">
@@ -22,6 +22,7 @@
                 var urlParams = new URLSearchParams(queryString)
                 var directory=urlParams.get("directory")
                 var name=urlParams.get("name")
+                var file_type=urlParams.get("file_type")
                 var path=""
                 if(directory=="/"){
                     path="/"+name
@@ -30,6 +31,7 @@
                 }
                 $("input[name=from]").val(path)
                 $("input[id=to]").val(path)
+                $("input[id=file_type]").val(file_type)
         app.ajaxSubmit($("form:last"), {
             before: function () {
                 app.closeError($('#error'))

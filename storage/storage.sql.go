@@ -62,7 +62,11 @@ SELECT * from CTE order by level desc limit 1;`
 	if len(sr) > 1 {
 		panic("should only return one row data.")
 	} else {
-		return sr[0]
+		r := sr[0]
+		if r["path"].(string) == "" {
+			r["path"] = "/"
+		}
+		return r
 	}
 }
 func (m *SQLManager) DoFileActions(actions []models.FileAction, user_id string) {
@@ -80,12 +84,66 @@ func (m *SQLManager) DoFileActions(actions []models.FileAction, user_id string) 
 
 	d := NewFileManager(m, user_id, max+1)
 	for _, action := range actions {
+		if action.FileType == 1 {
+			if action.Md5 == "" && action.ActionType != 3 {
+				panic("not set md5 value when add a file.")
+			}
+		} else if action.FileType == 2 {
+			if action.Md5 != "" {
+				panic("can not set md5 for a folder.")
+			}
+		} else {
+			panic("unkonw file type:" + strconv.Itoa(action.FileType))
+		}
 		if action.ActionType == 2 {
-			d.deleteFile(action.Path)
+			delete_file := d.m.GetFileByPath(action.Path, d.user_id)
+			if delete_file["path"].(string) != action.Path {
+				panic("the path to delete does not exists:" + action.Path)
+			}
+			d.deleteFile(delete_file["id"].(string))
 			continue
 		}
+		var last_folder_id string
+		if action.OldPath != "" {
+			if action.OldPath == action.Path {
+				panic("cannot move " + action.OldPath + " to a subdirectory of itself," + action.Path + "/" + filepath.Base(action.OldPath))
+			}
+			if action.OldPath == "/" {
+				panic("can not move root path /")
+			}
+			old_file := d.m.GetFileByPath(action.OldPath, d.user_id)
+			if old_file["path"].(string) != action.OldPath {
+				panic("the path does not exists:" + action.OldPath)
+			}
+			if strconv.Itoa(action.FileType) != old_file["type"] {
+				panic("file type parameter error.")
+			}
+			if action.FileType == 1 {
+				action.Md5 = *m.GetFile(old_file["id"].(string)).Md5
+			}
+			last_folder_id = old_file["file_id"].(string)
+			//check if the destination directory already exists.
+			destination_file := d.m.GetFileByPath(action.Path, d.user_id)
+			if destination_file["path"].(string) == action.Path {
+				//exist
+				if destination_file["type"].(string) == "1" {
+					panic("There is already a file with the same path as you specified:" + action.Path)
+				} else {
+					action.Path = filepath.Join(action.Path, "/", filepath.Base(action.OldPath))
+					if action.Path == action.OldPath {
+						fmt.Println("just continue as the destination path is same as source path.")
+						continue
+					}
+				}
+			}
+			d.deleteFile(old_file["id"].(string))
+		} else {
+			last_folder_id = uuid.New().String()
+		}
+
+		//decide the longest folder path
 		longest_folder := ""
-		if action.Md5 == "" {
+		if action.FileType == 2 {
 			longest_folder = action.Path
 		} else {
 			regexp, err := regexp.Compile(".*/")
@@ -94,22 +152,9 @@ func (m *SQLManager) DoFileActions(actions []models.FileAction, user_id string) 
 			}
 			longest_folder = strings.TrimRight(regexp.FindString(action.Path), "/")
 		}
-		var last_folder_id string
-		if action.OldPath != "" {
-			if action.OldPath == "/" {
-				panic("can not move root path /")
-			}
-			old_file := d.m.GetFileByPath(action.OldPath, d.user_id)
-			if old_file["path"].(string) != action.OldPath {
-				panic("the path does not exists:" + action.OldPath)
-			}
-			last_folder_id = old_file["file_id"].(string)
-			d.deleteFile(old_file["id"].(string))
-		} else {
-			last_folder_id = uuid.New().String()
-		}
+
 		dir := d.makeDirAll(longest_folder, last_folder_id)
-		if action.Md5 != "" {
+		if action.FileType == 1 {
 			name := filepath.Base(action.Path)
 			d.insertFile(name, last_folder_id, dir["file_id"].(string), action.Md5, false, 1)
 		}
@@ -173,6 +218,9 @@ func (d *fileManager) insertFile(name, file_id, p_file_id, md5 string, is_hidden
 	d.m.Tx.MustExec(insert_file, uuid.New(), time.Now().UTC(), name, "", d.user_id, file_info_id, false, is_hidden, t, strconv.FormatInt(d.revision, 10), file_id, stored_p_file_id)
 }
 func (d *fileManager) makeDirAll(path string, last_folder_id string) map[string]interface{} {
+	if path == "" {
+		path = "/"
+	}
 	for {
 		file := d.m.GetFileByPath(path, d.user_id)
 		p := file["path"].(string)
@@ -186,7 +234,7 @@ func (d *fileManager) makeDirAll(path string, last_folder_id string) map[string]
 			name = regexp.FindString(name)
 			fmt.Println("found parent directory " + p + " for " + path + ",creating directory " + name + " under it.")
 			var file_id string
-			if p+"/"+name == path {
+			if filepath.Join(p, "/", name) == path {
 				file_id = last_folder_id
 			} else {
 				file_id = uuid.New().String()
@@ -337,7 +385,7 @@ func (m *SQLManager) GetFileBlocks(server_file_id string) []models.FileBlock {
 	return fileBblocks
 }
 func (m *SQLManager) getFiles(where string, args ...interface{}) []models.File {
-	var sql = `SELECT file.id,file.user_id,file.start,file.is_hidden, file.insert_time, file.name,file.type,description, public.user.name,file_info.size,server_file.is_completed
+	var sql = `SELECT file.id,file.user_id,file.start,file.is_hidden, file.insert_time, file.name,file.type,description, public.user.name,file_info.size,file_info.md5,server_file.is_completed
 	  FROM file inner join public.user on file.user_id=public.user.id
 	  left join file_info on file.file_info_id=file_info.id
 	  left join server_file on file_info.id=server_file.file_info_id `
@@ -346,7 +394,7 @@ func (m *SQLManager) getFiles(where string, args ...interface{}) []models.File {
 	files := []models.File{}
 	for rows.Next() {
 		file := &models.File{}
-		rows.MustScan(&file.Id, &file.User_id, &file.Start, &file.Is_hidden, &file.InsertTime, &file.Name, &file.Type, &file.Description, &file.UserName, &file.Size, &file.Completed)
+		rows.MustScan(&file.Id, &file.User_id, &file.Start, &file.Is_hidden, &file.InsertTime, &file.Name, &file.Type, &file.Description, &file.UserName, &file.Size, &file.Md5, &file.Completed)
 		files = append(files, *file)
 	}
 	return files
@@ -416,7 +464,7 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
 			VALUES ($1, $2, $3,$4);`
 		m.Tx.MustExec(add, id, name, time.Now().UTC(), sub)
 		d := NewFileManager(m, id, 0)
-		d.insertFile("", "", "", "", false, 2)
+		d.insertFile("", uuid.New().String(), "", "", false, 2)
 	} else {
 		//update user name
 		update := `update public."user" set name=$1 where op_id=$2`
