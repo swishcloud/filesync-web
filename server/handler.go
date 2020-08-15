@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/swishcloud/filesync-web/storage"
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/filesync/message"
 	"github.com/swishcloud/filesync/session"
@@ -95,14 +96,12 @@ func (s *FileSyncWebServer) fileEditPostHandler() goweb.HandlerFunc {
 		name := ctx.Request.FormValue("name")
 		_ = name
 		path := ctx.Request.FormValue("path")
-		actions := []models.FileAction{}
-		action := models.FileAction{}
-		action.Path = path
-		action.ActionType = 1
-		action.FileType = 2
-		action.Md5 = ""
+		actions := []storage.Action{}
+		action := storage.CreateDirectoryAction{Path: path}
 		actions = append(actions, action)
-		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+			panic(err)
+		}
 		ctx.Success(nil)
 	}
 }
@@ -113,21 +112,14 @@ func (s *FileSyncWebServer) fileMoveHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) fileMovePostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		from := ctx.Request.FormValue("from")
-		to := ctx.Request.FormValue("to")
-		actions := []models.FileAction{}
-		action := models.FileAction{}
-		action.Path = to
-		action.OldPath = from
-		file_type, err := strconv.Atoi(ctx.Request.FormValue("file_type"))
-		if err != nil {
+		id := ctx.Request.FormValue("id")
+		destination := ctx.Request.FormValue("destination")
+		actions := []storage.Action{}
+		action := storage.MoveAction{Id: id, DestinationPath: destination}
+		actions = append(actions, action)
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
 			panic(err)
 		}
-		action.FileType = file_type
-		action.ActionType = 3
-		action.Md5 = ""
-		actions = append(actions, action)
-		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
 		ctx.Success(nil)
 	}
 }
@@ -146,15 +138,13 @@ func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		path := ctx.Request.FormValue("path")
-		actions := []models.FileAction{}
-		action := models.FileAction{}
-		action.Path = path
-		action.ActionType = 2
-		action.FileType = 2
-		action.Md5 = ""
+		id := ctx.Request.FormValue("id")
+		actions := []storage.Action{}
+		action := storage.DeleteAction{Id: id}
 		actions = append(actions, action)
-		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+			panic(err)
+		}
 		ctx.Success(nil)
 	}
 }
@@ -215,14 +205,13 @@ func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		path := ctx.Request.FormValue("path")
-		actions := []models.FileAction{}
-		action := models.FileAction{}
-		action.Path = path
-		action.ActionType = 2
-		action.Md5 = ""
+		id := ctx.Request.FormValue("id")
+		actions := []storage.Action{}
+		action := storage.DeleteAction{Id: id}
 		actions = append(actions, action)
-		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+			panic(err)
+		}
 		ctx.Success(nil)
 	}
 }
@@ -271,14 +260,14 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		login_user, _ := s.GetLoginUser(ctx)
-		file_id := ctx.Request.FormValue("id")
-		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_id)
-		file := s.GetStorage(ctx).GetFile(file_id)
+		id := ctx.Request.FormValue("id")
+		server_file := s.GetStorage(ctx).GetServerFileByFileId(id)
+		file := s.GetStorage(ctx).GetFile(id)
 		if server_file == nil {
 			panic("file not found")
 		}
 		ctx.FuncMap["downloadUrl"] = func() (string, error) {
-			return Path_Download_File + "/" + file_id + "/" + server_file.Name, nil
+			return Path_Download_File + "/" + id + "/" + server_file.Name, nil
 		}
 		can_delete := false
 		if login_user != nil && login_user.Id == file.User_id {
@@ -291,7 +280,7 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 			File        models.File
 			ServerFile  models.ServerFile
 			CanDelete   bool
-		}{DownloadUrl: Path_Download_File + "/" + file_id + "/" + server_file.Name, DeleteUrl: Path_File + "?file_id=" + file_id, File: file, ServerFile: *server_file, FileId: file_id, CanDelete: can_delete}
+		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
 }

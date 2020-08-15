@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 
-	"github.com/swishcloud/filesync-web/storage/models"
+	"github.com/swishcloud/filesync-web/storage"
 	"github.com/swishcloud/goweb"
 	"github.com/swishcloud/goweb/auth"
 	"golang.org/x/oauth2"
@@ -141,24 +141,28 @@ func (s *FileSyncWebServer) fileApiGetHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		json_str := ctx.Request.PostForm.Get("actions")
-		actions := []models.FileAction{}
-		json.Unmarshal([]byte(json_str), &actions)
-		s.GetStorage(ctx).DoFileActions(actions, s.MustGetLoginUser(ctx).Id)
-		// name := ctx.Request.PostForm.Get("name")
-		// md5 := ctx.Request.PostForm.Get("md5")
-		// size := ctx.Request.PostForm.Get("size")
-		// directory_path := ctx.Request.FormValue("directory_path")
-		// is_hidden, err := strconv.ParseBool(ctx.Request.FormValue("is_hidden"))
-		// if err != nil {
-		// 	panic(err)
-		// }
-		// revision, err := strconv.ParseInt(ctx.Request.FormValue("r"), 10, 64)
-		// if err != nil {
-		// 	revision = -1
-		// }
-		// directory := s.GetStorage(ctx).GetDirectory(directory_path, s.MustGetLoginUser(ctx).Id, revision)
-		// /s.GetStorage(ctx).InsertFileInfo(md5, name, s.MustGetLoginUser(ctx).Id, size, &directory.Id, is_hidden)
+		directory_actions_json := ctx.Request.PostForm.Get("directory_actions")
+		file_actions_json := ctx.Request.PostForm.Get("file_actions")
+		directory_actions := []storage.CreateDirectoryAction{}
+		file_actions := []storage.CreateFileAction{}
+		err := json.Unmarshal([]byte(directory_actions_json), &directory_actions)
+		if err != nil {
+			panic(err)
+		}
+		json.Unmarshal([]byte(file_actions_json), &file_actions)
+		if err != nil {
+			panic(err)
+		}
+		actions := []storage.Action{}
+		for _, a := range directory_actions {
+			actions = append(actions, a)
+		}
+		for _, a := range file_actions {
+			actions = append(actions, a)
+		}
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+			panic(err)
+		}
 		ctx.Success(nil)
 	}
 }

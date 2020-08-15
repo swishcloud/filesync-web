@@ -43,6 +43,18 @@ func (m *SQLManager) Commit() error {
 func (m *SQLManager) Rollback() error {
 	return m.Tx.Rollback()
 }
+
+func (m *SQLManager) GetExactFileByPath(path string, user_id string) map[string]interface{} {
+	query := `
+	WITH RECURSIVE CTE AS (
+		SELECT *,'' as path,0 as level from file where name='' and user_id=$1
+	  UNION ALL
+		SELECT f.*,CTE.path || '/' || f.name,CTE.level+1 from file f
+		inner join CTE on f.p_file_id=CTE.file_id where f."end" is null and $2 like CTE.path || '/' || f.name || '%'
+	  )
+	  SELECT * from CTE where path=$2 or $2='/'`
+	return m.Tx.ScanRow(query, user_id, path)
+}
 func (m *SQLManager) GetFileByPath(path string, user_id string) map[string]interface{} {
 	//regexp, err := regexp.Compile("/")
 	//if err != nil {
@@ -56,9 +68,8 @@ WITH RECURSIVE CTE AS (
     SELECT f.*,CTE.path || '/' || f.name,CTE.level+1 from file f
 	inner join CTE on f.p_file_id=CTE.file_id where f."end" is null and $2 like CTE.path || '/' || f.name || '/' || '%'
   )
-SELECT * from CTE order by level desc limit 1;`
+  SELECT * from CTE order by level desc limit 1;`
 	sr := ScanRows(m.Tx.MustQuery(query, user_id, path+"/"))
-	fmt.Println(sr)
 	if len(sr) > 1 {
 		panic("should only return one row data.")
 	} else {
@@ -69,6 +80,33 @@ SELECT * from CTE order by level desc limit 1;`
 		return r
 	}
 }
+
+func (m *SQLManager) SuperDoFileActions(actions []Action, user_id string) (err error) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			m.Rollback()
+			panic(err)
+		}
+	}()
+
+	m.Tx.MustExec(`LOCK TABLE file IN SHARE ROW EXCLUSIVE MODE;`)
+	row := m.Tx.MustQueryRow(`select max(a."max") from (select max(start) from file union select max("end") from file) a;`)
+	max := int64(-1)
+	row.MustScan(&max)
+	d := NewFileManager(m, user_id, max+1)
+	for _, action := range actions {
+		err = action.Do(d)
+		if err != nil {
+			break
+		}
+	}
+	if err != nil {
+		m.Rollback()
+	}
+	return err
+}
+
 func (m *SQLManager) DoFileActions(actions []models.FileAction, user_id string) {
 	defer func() {
 		err := recover()
@@ -156,7 +194,8 @@ func (m *SQLManager) DoFileActions(actions []models.FileAction, user_id string) 
 		dir := d.makeDirAll(longest_folder, last_folder_id)
 		if action.FileType == 1 {
 			name := filepath.Base(action.Path)
-			d.insertFile(name, last_folder_id, dir["file_id"].(string), action.Md5, false, 1)
+			file_id := dir["file_id"].(string)
+			d.insertFile(name, last_folder_id, &file_id, &action.Md5, false, 1)
 		}
 	}
 }
@@ -176,15 +215,15 @@ func NewFileManager(m *SQLManager, user_id string, revision int64) *fileManager 
 }
 
 //insert a file if t value is 1,if t value is 2 insert a directory.
-func (d *fileManager) insertFile(name, file_id, p_file_id, md5 string, is_hidden bool, t int) {
+func (d *fileManager) insertFile(name string, file_id string, p_file_id *string, md5 *string, is_hidden bool, t int) {
 	if t != 1 && t != 2 {
 		panic("the file type can only be 1 or 2.")
 	}
 	file_info_id := new(string)
-	if md5 != "" {
-		file_info := d.m.GetFileInfo(md5)
+	if md5 != nil {
+		file_info := d.m.GetFileInfo(*md5)
 		if file_info == nil {
-			panic("the file does not exits for md5 " + md5)
+			panic("the file does not exits for md5 " + *md5)
 		}
 		*file_info_id = file_info["id"].(string)
 	} else {
@@ -207,13 +246,13 @@ func (d *fileManager) insertFile(name, file_id, p_file_id, md5 string, is_hidden
 		id, insert_time, name, description, user_id, file_info_id,is_deleted,is_hidden,type,start,file_id,p_file_id)
 		VALUES ($1, $2, $3, $4, $5, $6,$7,$8,$9,$10,$11,$12);`
 	var stored_p_file_id *string
-	if p_file_id == "" || name == "" {
-		if p_file_id != "" || name != "" || t != 2 {
+	if p_file_id == nil || name == "" {
+		if p_file_id != nil || name != "" || t != 2 {
 			panic("parameters error.if add a root folder for a new user,then both p_file_id and name must be empty value.")
 		}
 		stored_p_file_id = nil
 	} else {
-		stored_p_file_id = &p_file_id
+		stored_p_file_id = p_file_id
 	}
 	d.m.Tx.MustExec(insert_file, uuid.New(), time.Now().UTC(), name, "", d.user_id, file_info_id, false, is_hidden, t, strconv.FormatInt(d.revision, 10), file_id, stored_p_file_id)
 }
@@ -239,7 +278,7 @@ func (d *fileManager) makeDirAll(path string, last_folder_id string) map[string]
 			} else {
 				file_id = uuid.New().String()
 			}
-			d.insertFile(name, file_id, loop_file_id, "", false, 2)
+			d.insertFile(name, file_id, &loop_file_id, nil, false, 2)
 		} else {
 			if file["type"].(string) != "2" {
 				panic("There is already a file with the same path as you specified:" + path)
@@ -249,8 +288,27 @@ func (d *fileManager) makeDirAll(path string, last_folder_id string) map[string]
 	}
 }
 
+func (d *fileManager) isExists(id string) (path string, exist bool) {
+	query := `
+	WITH RECURSIVE CTE AS (
+		SELECT *,'/'||name as p from file where id=$1 and "end" is null
+	  UNION ALL
+		SELECT f.*,'/'||f.name||CTE.p from file f
+		inner join CTE on f.file_id=CTE.p_file_id where f."end" is null
+	  )
+	  SELECT p_file_id,p from CTE where p_file_id is null;`
+	row := d.m.Tx.ScanRow(query, id)
+	if row == nil {
+		return "", false
+	}
+	path = row["p"].(string)
+	if row["p_file_id"] != "" {
+		path = string([]rune(path)[1:])
+	}
+	return path, true
+}
 func (d *fileManager) deleteFile(id string) {
-	d.m.Tx.MustExec(`update file set "end"=$1 where id=$2`, d.revision, id)
+	d.m.Tx.MustExec(`update file set "end"=$1 where id=$2 and "end" is null`, d.revision, id)
 }
 func (m *SQLManager) GetServers() []models.Server {
 	return m.getServers("")
@@ -355,15 +413,15 @@ func (m *SQLManager) GetFile(id string) models.File {
 func (m *SQLManager) GetFiles(p_file_id, user_id string, revision int64) []models.File {
 	if p_file_id == "" {
 		if revision == -1 {
-			return m.getFiles(` where is_deleted=false and p_file_id is null and file.user_id=$1 and "end" is null`, user_id)
+			return m.getFiles(` where is_deleted=false and p_file_id is null and file.user_id=$1 and "end" is null order by file.name`, user_id)
 		} else {
-			return m.getFiles(` where is_deleted=false and p_file_id is null and file.user_id=$1 and start<=$2 and ("end" is null or "end">$2)`, user_id, revision)
+			return m.getFiles(` where is_deleted=false and p_file_id is null and file.user_id=$1 and start<=$2 and ("end" is null or "end">$2) order by file.name`, user_id, revision)
 		}
 	} else {
 		if revision == -1 {
-			return m.getFiles(` where is_deleted=false and p_file_id=$1 and file.user_id=$2 and "end" is null`, p_file_id, user_id)
+			return m.getFiles(` where is_deleted=false and p_file_id=$1 and file.user_id=$2 and "end" is null order by file.name`, p_file_id, user_id)
 		} else {
-			return m.getFiles(` where is_deleted=false and p_file_id=$1 and file.user_id=$2 and start<=$3 and ("end" is null or "end">$3)`, p_file_id, user_id, revision)
+			return m.getFiles(` where is_deleted=false and p_file_id=$1 and file.user_id=$2 and start<=$3 and ("end" is null or "end">$3) order by file.name`, p_file_id, user_id, revision)
 		}
 	}
 }
@@ -385,7 +443,7 @@ func (m *SQLManager) GetFileBlocks(server_file_id string) []models.FileBlock {
 	return fileBblocks
 }
 func (m *SQLManager) getFiles(where string, args ...interface{}) []models.File {
-	var sql = `SELECT file.id,file.user_id,file.start,file.is_hidden, file.insert_time, file.name,file.type,description, public.user.name,file_info.size,file_info.md5,server_file.is_completed
+	var sql = `SELECT file.id,file.user_id,file.start,file.is_hidden, file.insert_time, file.name,file.type,file.file_id,file.p_file_id,description, public.user.name,file_info.size,file_info.md5,server_file.is_completed
 	  FROM file inner join public.user on file.user_id=public.user.id
 	  left join file_info on file.file_info_id=file_info.id
 	  left join server_file on file_info.id=server_file.file_info_id `
@@ -394,7 +452,7 @@ func (m *SQLManager) getFiles(where string, args ...interface{}) []models.File {
 	files := []models.File{}
 	for rows.Next() {
 		file := &models.File{}
-		rows.MustScan(&file.Id, &file.User_id, &file.Start, &file.Is_hidden, &file.InsertTime, &file.Name, &file.Type, &file.Description, &file.UserName, &file.Size, &file.Md5, &file.Completed)
+		rows.MustScan(&file.Id, &file.User_id, &file.Start, &file.Is_hidden, &file.InsertTime, &file.Name, &file.Type, &file.File_id, &file.P_file_id, &file.Description, &file.UserName, &file.Size, &file.Md5, &file.Completed)
 		files = append(files, *file)
 	}
 	return files
@@ -464,7 +522,7 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
 			VALUES ($1, $2, $3,$4);`
 		m.Tx.MustExec(add, id, name, time.Now().UTC(), sub)
 		d := NewFileManager(m, id, 0)
-		d.insertFile("", uuid.New().String(), "", "", false, 2)
+		d.insertFile("", uuid.New().String(), nil, nil, false, 2)
 	} else {
 		//update user name
 		update := `update public."user" set name=$1 where op_id=$2`

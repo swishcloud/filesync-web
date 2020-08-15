@@ -6,7 +6,7 @@
     </div>
     <table class="table">
         <tr>
-                <th><input type="checkbox"></th> <th>name</th> <th>description</th> <th>type</th> <th>is_hidden</th> <th>size</th>  <th>time</th> <th>complete</th><th>user</th><th>#</th>
+                <th><input type="checkbox"></th> <th>name</th> <th>description</th> <th>type</th> <th>size</th>  <th>time</th> <th>user</th><th>#</th>
         </tr>
         {{range .Files}}
         <tr id={{.Id}} file_type={{.Type}} name="{{.Name}}">
@@ -16,7 +16,12 @@
                 file
                 {{else}}folder
                 {{end}}
-            <td>{{.Is_hidden}}</td> <td>{{.Size}}</td><td>{{formatTime .InsertTime ""}}</td><td>{{.Completed}}</td><td>{{.UserName}}</td>
+                {{if .Size}}
+                <td>{{.Size}}</td>
+                {{else}}
+                <td></td>
+                {{end}}
+            <td>{{formatTime .InsertTime ""}}</td><td>{{.UserName}}</td>
             <td>
                 {{if eq .Type 1}}
                 {{else}}<button class="btn btn-danger directory-remove">remove</button>
@@ -32,15 +37,9 @@
     var delete_directory_url="{{.DirectoryUrlPath}}"
     $(".directory-remove").on("click",function(){
         if(confirm("are you sure to delete this directory?")){
-            let name=$(this).parents("tr").attr("name")
-            var directory="{{.File_Path}}"
-            if (directory=="/"){
-                path=directory+name
-            }else{
-                path=directory+"/"+name
-            }
+            let id=$(this).parents("tr").attr("id")
             var parameters={
-                path:path
+                id:id
             }
             debugger
             $.ajax({
@@ -63,10 +62,12 @@
             var directory="{{.File_Path}}"
             var name=$(this).parents("tr").attr("name")
             var file_type=$(this).parents("tr").attr("file_type")
+            var id=$(this).parents("tr").attr("id")
             var parameters={
                 directory:directory,
                 name:name,
-                file_type:file_type
+                file_type:file_type,
+                id:id
             }
             var url=file_move_path+"?"+$.param(parameters)
             document.location.href=url

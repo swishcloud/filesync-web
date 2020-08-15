@@ -26,4 +26,5 @@ type Storage interface {
 	UpdateServer(id, name, ip, port string)
 	DeleteServer(id string)
 	SetFileHidden(file_id string, is_hidden bool)
+	SuperDoFileActions(actions []Action, user_id string) (err error)
 }

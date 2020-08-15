@@ -9,6 +9,8 @@ type User struct {
 }
 type File struct {
 	Id          string
+	File_id     string
+	P_file_id   *string
 	InsertTime  time.Time
 	Description string
 	Name        string
