@@ -9,6 +9,7 @@ import (
 
 var db_conn_info string = "postgres://filesync:secret@192.168.1.1:6010/filesync?sslmode=disable"
 var user_id string = "40aee33a-7700-4537-ad0c-7ad6e61ec326"
+var partition_id string = "0bb4c750-deee-11ea-87d0-0242ac130003"
 var root_directory_id string = "5acb3705-68de-4391-8c10-488f348877b0"
 
 //test Add,Delete,Rename,Move,Query.
@@ -34,7 +35,7 @@ func Test1(t *testing.T) {
 	a = append(a, CreateDirectoryAction{Path: "/home2"})
 	a = append(a, CreateDirectoryAction{Path: "/home2/sub2"})
 	a = append(a, CreateDirectoryAction{Path: "/home3"})
-	err := manager.SuperDoFileActions(a, user_id)
+	err := manager.SuperDoFileActions(a, user_id, partition_id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func Test1(t *testing.T) {
 	//Rename
 	a = []Action{}
 	a = append(a, RenameAction{Id: file["id"].(string), NewName: "renamed"})
-	err = manager.SuperDoFileActions(a, user_id)
+	err = manager.SuperDoFileActions(a, user_id, partition_id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func Test1(t *testing.T) {
 	//delete
 	a = []Action{}
 	a = append(a, DeleteAction{Id: file["id"].(string)})
-	err = manager.SuperDoFileActions(a, user_id)
+	err = manager.SuperDoFileActions(a, user_id, partition_id)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -87,7 +88,7 @@ func Test1(t *testing.T) {
 	//Move
 	a = []Action{}
 	a = append(a, MoveAction{Id: file["id"].(string), DestinationPath: "/"})
-	err = manager.SuperDoFileActions(a, user_id)
+	err = manager.SuperDoFileActions(a, user_id, partition_id)
 	if err != nil {
 		log.Fatal(err)
 	}

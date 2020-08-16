@@ -3,9 +3,10 @@ package models
 import "time"
 
 type User struct {
-	Id     string
-	Name   string
-	Avatar string
+	Id           string
+	Name         string
+	Avatar       string
+	Partition_id string
 }
 type File struct {
 	Id          string
@@ -21,7 +22,7 @@ type File struct {
 	Completed   *bool
 	Is_hidden   bool
 	Type        int
-	Start       *int64
+	Commit_id   string
 }
 
 type FileAction struct {

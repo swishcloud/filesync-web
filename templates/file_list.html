@@ -2,16 +2,18 @@
 <div class="container">
     <div class="mb-3">
         <a  class="btn btn-primary"href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
-        <a  class="btn btn-primary directory-move">move</a>
+        <a  class="btn btn-primary directory-move" href="#">move</a>
+        <a  class="btn btn-primary directory-rename" href="#">rename</a>
+        <a  class="btn btn-primary directory-remove" href="#">remove</a>
     </div>
     <table class="table">
         <tr>
-                <th><input type="checkbox"></th> <th>name</th> <th>description</th> <th>type</th> <th>size</th>  <th>time</th> <th>user</th><th>#</th>
+                <th><input type="checkbox"></th> <th>name</th>  <th>type</th> <th>size</th>  <th>time</th> <th>user</th>
         </tr>
         {{range .Files}}
         <tr id={{.Id}} file_type={{.Type}} name="{{.Name}}">
             <td><input type="checkbox"></td>
-            <td><a style="color:blue" href="{{detailUrl .}}">{{.Name}}</a></td><td>{{.Description}}</td>
+            <td><a style="color:blue" href="{{detailUrl .}}">{{.Name}}</a></td>
             <td>{{if eq .Type 1}}
                 file
                 {{else}}folder
@@ -22,11 +24,6 @@
                 <td></td>
                 {{end}}
             <td>{{formatTime .InsertTime ""}}</td><td>{{.UserName}}</td>
-            <td>
-                {{if eq .Type 1}}
-                {{else}}<button class="btn btn-danger directory-remove">remove</button>
-                {{end}}
-            </td>
         </tr>
         {{end}}
     </table>
@@ -36,24 +33,29 @@
 <script>
     var delete_directory_url="{{.DirectoryUrlPath}}"
     $(".directory-remove").on("click",function(){
-        if(confirm("are you sure to delete this directory?")){
-            let id=$(this).parents("tr").attr("id")
-            var parameters={
+        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes,function(){
+            var id=$(this).parents("tr").attr("id")
+            var name=$(this).parents("tr").attr("name")
+
+            if(confirm("are you sure to delete '"+name+"' ?")){
+                var parameters={
                 id:id
-            }
-            debugger
-            $.ajax({
-            url: delete_directory_url+"?"+$.param(parameters),
-            type: 'DELETE',
-            success: function(result) {
-                if(result.error==null){
+                }
+                $.ajax({
+                url: delete_directory_url+"?"+$.param(parameters),
+                type: 'DELETE',
+                success: function(result) {
+                if(result.error==null){  
                     document.location.reload(true)
                 }else{
                     alert(result.error)
                 }
+                }
+            })
              }
+             return//just return,does not care other checked boxes if any.
         })
-        }
     })
     var file_move_path="{{.Path_File_Move}}"
     $(".directory-move").on("click",function(){
@@ -72,6 +74,19 @@
             var url=file_move_path+"?"+$.param(parameters)
             document.location.href=url
             return//just return,does not care other if any.
+        })
+    })
+    var file_rename_path="{{.Path_File_Rename}}"
+    $(".directory-rename").on("click",function(){
+        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes,function(){
+            var id=$(this).parents("tr").attr("id")
+            var parameters={
+                id:id
+            }
+            var url=file_rename_path+"?"+$.param(parameters)
+            document.location.href=url
+            return//just return,does not care other checked boxes if any.
         })
     })
 </script>

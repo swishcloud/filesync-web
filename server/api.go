@@ -160,7 +160,7 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 		for _, a := range file_actions {
 			actions = append(actions, a)
 		}
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(nil)

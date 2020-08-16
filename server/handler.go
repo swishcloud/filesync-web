@@ -51,7 +51,9 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 const (
 	Path_Index          = "/"
 	Path_File           = "/file"
+	Path_File_Rename    = "/file_rename"
 	Path_File_Edit      = "/file_edit"
+	Path_File_History   = "/file/history"
 	Path_File_Move      = "/file_move"
 	Path_File_List      = "/file/list"
 	Path_Login          = "/login"
@@ -85,6 +87,44 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.POST(Path_File_Edit, s.fileEditPostHandler())
 	root.GET(Path_File_Move, s.fileMoveHandler())
 	root.POST(Path_File_Move, s.fileMovePostHandler())
+	root.GET(Path_File_History, s.fileHistoryHandler())
+	root.GET(Path_File_Rename, s.fileRenameHandler())
+	root.POST(Path_File_Rename, s.fileRenamePostHandler())
+}
+
+func (s *FileSyncWebServer) fileRenameHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		file := s.GetStorage(ctx).GetFile(id)
+		model := struct {
+			File models.File
+		}{File: file}
+		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_rename.html")
+	}
+}
+
+func (s *FileSyncWebServer) fileRenamePostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		name := ctx.Request.FormValue("name")
+		actions := []storage.Action{}
+		action := storage.RenameAction{Id: id, NewName: name}
+		actions = append(actions, action)
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+			panic(err)
+		}
+		ctx.Success(nil)
+	}
+}
+func (s *FileSyncWebServer) fileHistoryHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		file_id := ctx.Request.FormValue("fid")
+		histories := s.GetStorage(ctx).GetHistoryRevisions(file_id, s.MustGetLoginUser(ctx).Partition_id)
+		model := struct {
+			Histories []map[string]interface{}
+		}{Histories: histories}
+		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_history.html")
+	}
 }
 func (s *FileSyncWebServer) fileEditHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
@@ -93,13 +133,11 @@ func (s *FileSyncWebServer) fileEditHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) fileEditPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		name := ctx.Request.FormValue("name")
-		_ = name
 		path := ctx.Request.FormValue("path")
 		actions := []storage.Action{}
 		action := storage.CreateDirectoryAction{Path: path}
 		actions = append(actions, action)
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(nil)
@@ -117,7 +155,7 @@ func (s *FileSyncWebServer) fileMovePostHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.MoveAction{Id: id, DestinationPath: destination}
 		actions = append(actions, action)
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(nil)
@@ -142,7 +180,7 @@ func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.DeleteAction{Id: id}
 		actions = append(actions, action)
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(nil)
@@ -209,7 +247,7 @@ func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.DeleteAction{Id: id}
 		actions = append(actions, action)
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id); err != nil {
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(nil)
@@ -222,19 +260,20 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 		if err != nil {
 			revision = -1
 		}
-		directory := s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id, revision)
+		directory := s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Partition_id, revision)
 		if directory == nil {
 			panic("path does not exits")
 		}
-		files := s.GetStorage(ctx).GetFiles(directory.File_id, s.MustGetLoginUser(ctx).Id, revision)
+		files := s.GetStorage(ctx).GetFiles(directory.File_id, s.MustGetLoginUser(ctx).Partition_id, revision)
 		data := struct {
 			Path             string
 			Files            []models.File
 			DirectoryUrlPath string
 			Path_File_Edit   string
 			Path_File_Move   string
+			Path_File_Rename string
 			File_Path        string
-		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, File_Path: "/" + path}
+		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, File_Path: "/" + path, Path_File_Rename: Path_File_Rename}
 		ctx.FuncMap["detailUrl"] = func(file models.File) (string, error) {
 			if file.Type == 1 {
 				return Path_File + "?id=" + file.Id, nil
@@ -280,7 +319,8 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 			File        models.File
 			ServerFile  models.ServerFile
 			CanDelete   bool
-		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete}
+			HistoryUrl  string
+		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?fid=" + file.File_id}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
 }

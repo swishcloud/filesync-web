@@ -25,6 +25,14 @@ func (action CreateDirectoryAction) Do(m *fileManager) error {
 	}
 	for {
 		file := m.m.GetFileByPath(path, m.user_id)
+		if file == nil {
+			//create root directory
+			if path != "/" {
+				return errors.New("can not find root directory at all")
+			}
+			m.insertFile("", uuid.New().String(), nil, nil, false, 2)
+			return nil
+		}
 		p := file["path"].(string)
 		loop_file_id := file["file_id"].(string)
 		if p != path {

@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="container">
+        <form method="post" class="col-lg-4" >
+            <input type="hidden" value="{{.File.Id}}">
+            <div id="error">
+            </div>
+                <div class="form-group">
+                    <label for="name">name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{.File.Name}}" required>
+                </div>
+                <button  type="submit" class="btn btn-primary">save</button>
+            </form>
+</div>
+{{end}}
+{{define "scripts"}}
+<script>
+    app.ajaxSubmit($("form:last"), {
+            before: function () {
+                app.closeError($('#error'))
+            },
+            success: function (res) {
+                if (res.error) {
+                        app.showError($('#error'), res.error)
+                } else {
+                        window.location.href = "/file/list"
+                }
+            }
+        })
+    </script>
+{{end}}
