@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"strconv"
 	"time"
@@ -41,18 +42,18 @@ func (m *SQLManager) Rollback() error {
 	return m.Tx.Rollback()
 }
 
-func (m *SQLManager) GetExactFileByPath(path string, user_id string) map[string]interface{} {
+func (m *SQLManager) GetExactFileByPath(path string, partition_id string) map[string]interface{} {
 	query := `
 	WITH RECURSIVE CTE AS (
-		SELECT *,'' as path,0 as level from file where name='' and user_id=$1
+		SELECT *,'' as path,0 as level from file where name='' and partition_id=$1
 	  UNION ALL
 		SELECT f.*,CTE.path || '/' || f.name,CTE.level+1 from file f
 		inner join CTE on f.p_file_id=CTE.file_id where f.end_commit_id is null and $2 like CTE.path || '/' || f.name || '%'
 	  )
 	  SELECT * from CTE where path=$2 or $2='/'`
-	return m.Tx.ScanRow(query, user_id, path)
+	return m.Tx.ScanRow(query, partition_id, path)
 }
-func (m *SQLManager) GetFileByPath(path string, user_id string) map[string]interface{} {
+func (m *SQLManager) GetFileByPath(path string, partition_id string) map[string]interface{} {
 	//regexp, err := regexp.Compile("/")
 	//if err != nil {
 	//	panic(err)
@@ -60,13 +61,13 @@ func (m *SQLManager) GetFileByPath(path string, user_id string) map[string]inter
 	//level := len(regexp.FindAllString(path, -1))
 	query := `
 WITH RECURSIVE CTE AS (
-    SELECT *,'' as path,0 as level from file where name='' and user_id=$1
+    SELECT *,'' as path,0 as level from file where name='' and partition_id=$1
   UNION ALL
     SELECT f.*,CTE.path || '/' || f.name,CTE.level+1 from file f
 	inner join CTE on f.p_file_id=CTE.file_id where f.end_commit_id is null and $2 like CTE.path || '/' || f.name || '/' || '%'
   )
   SELECT * from CTE order by level desc limit 1;`
-	return m.Tx.ScanRow(query, user_id, path+"/")
+	return m.Tx.ScanRow(query, partition_id, path+"/")
 }
 func (m *SQLManager) SuperDoFileActions(actions []Action, user_id, partition_id string) (err error) {
 	defer func() {
@@ -111,12 +112,31 @@ func NewFileManager(m *SQLManager, user_id string, revision int64) *fileManager 
 	d.revision = revision
 	return d
 }
-func (m *SQLManager) GetHistoryRevisions(file_id, partition_id string) []map[string]interface{} {
-	query := `select file.*,file_info.size,public."user".name from file
-	inner join file_info on file.file_info_id=file_info.id
-	inner join public."user" on file.user_id=public."user".id
-	where file.partition_id=$1 and file_id=$2 order by file.insert_time desc`
-	rows := m.Tx.ScanRows(query, partition_id, file_id)
+func (m *SQLManager) GetHistoryRevisions(path, partition_id string) []map[string]interface{} {
+	query := `
+	WITH RECURSIVE CTE AS (
+		SELECT file.*,'' as path,commit.index as commit_index from file 
+		inner join commit on file.start_commit_id=commit.id
+		where p_file_id is null and file.partition_id=$2
+	  UNION ALL
+		SELECT file.*,CTE.path || '/' || file.name,
+		case when start_commit.index>CTE.commit_index then start_commit.index
+			 else CTE.commit_index
+		end
+		from file 
+		inner join commit start_commit on file.start_commit_id=start_commit.id
+		inner join CTE on file.p_file_id=CTE.file_id
+		where $1 like CTE.path || '/' || file.name || '%'
+	  )
+	SELECT CTE.*,commit.id as commit_id,commit.index as commit_index,file_info.size,public."user".name as user_name from CTE
+	inner join commit on CTE.commit_index=commit.index
+	left join file_info on CTE.file_info_id=file_info.id
+	inner join public."user" on CTE.user_id=public."user".id
+	where (CTE.path=$1 or $1='/') and commit.partition_id=$2
+	order by commit.index desc;
+	`
+	//query = "select *,name as path from file where $1!='1xfafa' and partition_id=$2"
+	rows := m.Tx.ScanRows(query, path, partition_id)
 	return rows
 }
 
@@ -258,14 +278,43 @@ func (m *SQLManager) GetFile(id string) models.File {
 		panic("not found")
 	}
 }
-func (m *SQLManager) GetFiles(p_file_id, partition_id string, revision int64) []models.File {
-	revision = common.MaxInt64
-	if p_file_id == "" {
-		return m.getFiles(` where is_deleted=false and p_file_id is null and file.partition_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2) order by file.name`, partition_id, revision)
-	} else {
-		return m.getFiles(` where is_deleted=false and p_file_id=$1 and file.partition_id=$2 and start_commit.index<=$3 and (end_commit.index is null or end_commit.index>$3) order by file.name`, p_file_id, partition_id, revision)
+func (m *SQLManager) GetFiles(path string, commit_id *string, revision int64, partition_id string) (files []map[string]interface{}, err error) {
+	histories := m.GetHistoryRevisions(path, partition_id)
+	var directory map[string]interface{} = nil
+	if commit_id != nil {
+		for _, his := range histories {
+			if his["commit_id"].(string) == *commit_id {
+				directory = his
+				break
+			}
+		}
+	} else if len(histories) > 0 {
+		directory = histories[0]
 	}
+	if directory == nil {
+		return nil, errors.New("the directory does not exist.")
+	}
+	directory_commit_id := directory["commit_id"].(string)
+	directory_commit_index, err := strconv.ParseInt(directory["commit_index"].(string), 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	query := `select file.*,case when start_commit.index>$3 then start_commit.id else $4 end as commit_id,file_info.size from file 
+	inner join commit start_commit on file.start_commit_id=start_commit.id
+	left join commit end_commit on file.end_commit_id=end_commit.id
+	left join file_info on file.file_info_id=file_info.id
+	where file.p_file_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2)`
+	return m.Tx.ScanRows(query, directory["file_id"].(string), revision, directory_commit_index, directory_commit_id), nil
 }
+
+// func (m *SQLManager) GetFiles(p_file_id, partition_id string, revision int64) []models.File {
+// 	revision = common.MaxInt64
+// 	if p_file_id == "" {
+// 		return m.getFiles(` where is_deleted=false and p_file_id is null and file.partition_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2) order by file.name`, partition_id, revision)
+// 	} else {
+// 		return m.getFiles(` where is_deleted=false and p_file_id=$1 and file.partition_id=$2 and start_commit.index<=$3 and (end_commit.index is null or end_commit.index>$3) order by file.name`, p_file_id, partition_id, revision)
+// 	}
+// }
 func (m *SQLManager) GetFileBlocks(server_file_id string) []models.FileBlock {
 	query := `SELECT id, server_file_id, p_id, "end", start, path
     FROM public.file_block where server_file_id=$1 order by "end" desc;`
@@ -362,8 +411,8 @@ func (m *SQLManager) addPartition() (id string) {
 	VALUES ($1, $2);`, id, time.Now().UTC())
 	return id
 }
-func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
-	user := m.GetUserByOpId(sub)
+func (m *SQLManager) AddOrUpdateUser(sub string, name string) (user *models.User, err error) {
+	user = m.GetUserByOpId(sub)
 	if user == nil {
 		id := uuid.New().String()
 		new_partition_id := m.addPartition()
@@ -378,12 +427,17 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) {
 		if err := m.SuperDoFileActions(actions, id, new_partition_id); err != nil {
 			panic(err)
 		}
+		user = m.GetUserByOpId(sub)
+		if user == nil {
+			err = errors.New("unknown error.")
+		}
 	} else {
 		//update user name
 		update := `update public."user" set name=$1 where op_id=$2`
 		m.Tx.MustExec(update, name, sub)
 
 	}
+	return user, err
 }
 
 func (m *SQLManager) GetDirectory(path string, partition_id string, revision int64) *models.Directory {

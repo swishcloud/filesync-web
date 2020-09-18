@@ -1,8 +1,9 @@
 {{define "content"}}
 <div class="container">
+    <h4>{{.Path}}</h4>
         <table class="table">
                 <tr>
-                <th>name</th>    
+                <th>revision</th>    
                 <th>uploaded time</th>    
                 <th>size</th>    
                 <th>user</th>    
@@ -10,10 +11,14 @@
                 {{range .Histories}}
                 {{$time:=index . "insert_time"}}
                 <tr >
-                   <td>{{index . "name"}}</td>
+                   <td><a style="color:blue" href="{{detailUrl .}}">{{index . "commit_id"}}</a></td>
                    <td>{{formatTimeString $time ""}}</td>
-                   <td>{{.size}} bytes</td>
-                   <td>{{.name}}</td>
+                   <td>
+                    {{if .size}}
+                    {{.size}} bytes
+                    {{end}}
+                    </td>
+                   <td>{{.user_name}}</td>
                 </tr>
                 {{end}}
             </table>

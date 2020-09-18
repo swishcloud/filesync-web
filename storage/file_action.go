@@ -24,7 +24,7 @@ func (action CreateDirectoryAction) Do(m *fileManager) error {
 		return err
 	}
 	for {
-		file := m.m.GetFileByPath(path, m.user_id)
+		file := m.m.GetFileByPath(path, m.partition_id)
 		if file == nil {
 			//create root directory
 			if path != "/" {
@@ -36,7 +36,7 @@ func (action CreateDirectoryAction) Do(m *fileManager) error {
 		p := file["path"].(string)
 		loop_file_id := file["file_id"].(string)
 		if p != path {
-			name := string([]rune(path)[len(p):])
+			name := string([]rune(path)[len([]rune(p)):])
 			regexp, err := regexp.Compile("[^/]+")
 			if err != nil {
 				panic(err)
@@ -72,7 +72,7 @@ func (action CreateFileAction) Do(m *fileManager) error {
 	if action.Name == "" || action.Md5 == "" {
 		return errors.New("not set name or md5 value.")
 	}
-	location := m.m.GetExactFileByPath(action.Location, m.user_id)
+	location := m.m.GetExactFileByPath(action.Location, m.partition_id)
 	if location == nil {
 		return errors.New("can not find the destination path.")
 	}
@@ -127,7 +127,7 @@ func (action MoveAction) Do(m *fileManager) error {
 		return errors.New("this source file does not exist.")
 	}
 
-	f := m.m.GetExactFileByPath(action.DestinationPath, m.user_id)
+	f := m.m.GetExactFileByPath(action.DestinationPath, m.partition_id)
 	if f == nil {
 		return errors.New("can not find the destination path.")
 	}

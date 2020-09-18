@@ -8,22 +8,25 @@
     </div>
     <table class="table">
         <tr>
-                <th><input type="checkbox"></th> <th>name</th>  <th>type</th> <th>size</th>  <th>time</th> <th>user</th>
+                <th><input type="checkbox"></th> <th>name</th>  <th>type</th> <th>size</th>  <th>time</th> 
         </tr>
         {{range .Files}}
-        <tr id={{.Id}} file_type={{.Type}} name="{{.Name}}">
+        {{$type:=index . "type"}}
+        {{$insert_time:=index . "insert_time"}}
+        {{$size:=index . "size"}}
+        <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}' commit_id='{{index . "commit_id"}}'>
             <td><input type="checkbox"></td>
-            <td><a style="color:blue" href="{{detailUrl .}}">{{.Name}}</a></td>
-            <td>{{if eq .Type 1}}
+            <td><a style="color:blue" href="{{detailUrl .}}">{{index . "name"}}</a></td>
+            <td>{{if eq $type "1"}}
                 file
                 {{else}}folder
                 {{end}}
-                {{if .Size}}
-                <td>{{.Size}}</td>
+                {{if $size}}
+                <td>{{$size}} bytes</td>
                 {{else}}
                 <td></td>
                 {{end}}
-            <td>{{formatTime .InsertTime ""}}</td><td>{{.UserName}}</td>
+            <td>{{formatTimeString $insert_time ""}}</td>
         </tr>
         {{end}}
     </table>
