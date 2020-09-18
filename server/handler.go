@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,9 +65,11 @@ const (
 	Path_Server         = "/server"
 	Path_Server_Edit    = "/server_edit"
 	Path_Directory      = "/directory"
+	Path_File_Upload    = "/file/upload"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
+	open := root.Group()
 	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.Use(s.genericMiddleware())
 	root.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
@@ -90,6 +94,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_File_History, s.fileHistoryHandler())
 	root.GET(Path_File_Rename, s.fileRenameHandler())
 	root.POST(Path_File_Rename, s.fileRenamePostHandler())
+	open.POST(Path_File_Upload, s.fileUploadPostHandler())
 }
 
 func (s *FileSyncWebServer) fileRenameHandler() goweb.HandlerFunc {
@@ -376,6 +381,53 @@ func (s *FileSyncWebServer) logoutHandler() goweb.HandlerFunc {
 	}
 }
 
+func (s *FileSyncWebServer) fileUploadPostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		err := ctx.Request.ParseMultipartForm(1024 * 10)
+		if err != nil {
+			panic(err)
+		}
+		md5 := ctx.Request.Form.Get("md5")
+		if md5 == "" {
+			panic("missing md5 parameter")
+		}
+		file, header, err := ctx.Request.FormFile("file")
+		if err != nil {
+			panic(err)
+		}
+		temp_path := filepath.Join(s.config.temp_folder, md5)
+		temp_file, err := os.Create(temp_path)
+		if err != nil {
+			panic(err)
+		}
+		_, err = io.Copy(temp_file, file)
+		if err != nil {
+			panic(err)
+		}
+		err = temp_file.Close()
+		if err != nil {
+			panic(err)
+		}
+		temp_md5, err := common.FileMd5Hash(temp_path)
+		if err != nil {
+			panic(err)
+		}
+		if strings.ToUpper(temp_md5) != md5 {
+			panic("the md5 of uploaded file and the md5 paramter value are inconsistent")
+		}
+		fileName, err := url.QueryUnescape(header.Filename)
+		if err != nil {
+			panic(err)
+		}
+		filepath := filepath.Join(s.config.upload_folder, md5+"-"+fileName)
+
+		err = os.Rename(temp_path, filepath)
+		if err != nil {
+			panic(err)
+		}
+		log.Println("received file:", fileName)
+	}
+}
 func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		fmt.Println(ctx.Request.Header)

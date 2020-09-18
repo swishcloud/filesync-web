@@ -1,5 +1,5 @@
 db_conn_info: "postgres://filesync:secret@192.168.1.1:6010/filesync?sslmode=disable"
-listen_ip: 192.168.1.1
+listen_ip: 0.0.0.0
 oauth:
   ClientId: "FILESYNC_WEB"
   TokenUrl: "https://192.168.1.1:8010/oauth2/token"

@@ -31,6 +31,7 @@ type Config struct {
 	DB_CONN_INFO  string      `yaml:"db_conn_info"`
 	OAuth         ConfigOAuth `yaml:"oauth"`
 	upload_folder string
+	temp_folder   string
 	Tls_cert_file string `yaml:"tls_cert_file"`
 	Tls_key_file  string `yaml:"tls_key_file"`
 }
@@ -79,7 +80,9 @@ func readConfig(configPath string) *Config {
 	}
 
 	config.upload_folder = config.FILE_LOCATION + "upload/"
+	config.temp_folder = config.FILE_LOCATION + "temp/"
 	err = os.MkdirAll(config.upload_folder, os.ModePerm)
+	err = os.MkdirAll(config.temp_folder, os.ModePerm)
 	if err != nil {
 		log.Fatal(err)
 	}
