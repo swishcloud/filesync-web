@@ -347,7 +347,9 @@ func (s *FileSyncWebServer) serverEditHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		ctx.Writer.EnsureInitialzed(true)
+		if strings.Index(ctx.Request.URL.Path, Path_Download_File) != 0 {
+			ctx.Writer.EnsureInitialzed(true)
+		}
 		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
 			user := s.GetStorage(ctx).GetUserByOpId(session.Claims["sub"].(string))
 			ctx.Data["user"] = user
