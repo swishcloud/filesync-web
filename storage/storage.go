@@ -11,7 +11,7 @@ type Storage interface {
 	GetFileInfo(md5 string) map[string]interface{}
 	InsertFileInfo(md5, userId string, size int64)
 	GetFile(id string) models.File
-	GetFiles(path string, commit_id *string, revision int64, partition_id string) (files []map[string]interface{}, err error)
+	GetFiles(path string, commit_id string, max_commit_id string, partition_id string) (files []map[string]interface{}, err error)
 	GetFileBlocks(server_file_id string) []models.FileBlock
 	GetServerFileByFileId(file_id string) *models.ServerFile
 	CompleteServerFile(server_file_id string)
@@ -28,4 +28,7 @@ type Storage interface {
 	SuperDoFileActions(actions []Action, user_id, partition_id string) (err error)
 	GetHistoryRevisions(path, partition_id string) []map[string]interface{}
 	GetExactFileByPath(path string, partition_id string) map[string]interface{}
+	AddShare(path string, partition_id string, commit_id string, max_commit_id string, user_id string) (token string)
+	GetShareByToken(token string) map[string]interface{}
+	GetPartitionLatestCommit(partition_id string) map[string]interface{}
 }

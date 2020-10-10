@@ -66,20 +66,100 @@ const (
 	Path_Server_Edit    = "/server_edit"
 	Path_Directory      = "/directory"
 	Path_File_Upload    = "/file/upload"
+	Path_File_Share     = "/file/share"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open := root.Group()
-	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.Use(s.genericMiddleware())
 	root.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
 		http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))).ServeHTTP(context.Writer, context.Request)
 	})
+	open.RegexMatch(regexp.MustCompile(`/sh/.+`), func(ctx *goweb.Context) {
+		r := regexp.MustCompile("[^/]+")
+		strs := r.FindAllString(ctx.Request.URL.Path, -1)
+		token := strs[1]
+		relative_path := strings.Join(strs[2:], "/")
+		share := s.GetStorage(ctx).GetShareByToken(token)
+		path := filepath.Join(share["path"].(string), relative_path)
+		partition_id := share["partition_id"].(string)
+		dl := ctx.Request.FormValue("dl")
+		file := s.GetStorage(ctx).GetExactFileByPath(path, partition_id)
+		if file == nil {
+			panic("not found")
+		}
+		if dl == "1" { //directly download
+			if file["type"].(string) == "2" {
+			} else { //it's a file
+				server_file := s.GetStorage(ctx).GetServerFileByFileId(file["id"].(string))
+				conn, err := net.Dial("tcp", server_file.Ip+":"+strconv.Itoa(server_file.Port))
+				if err != nil {
+					panic(err)
+				}
+				s := session.NewSession(conn)
+				msg := message.NewMessage(message.MT_Download_File)
+				msg.Header["path"] = server_file.Path
+				_, err = s.Fetch(msg, nil)
+				if err != nil {
+					panic(err)
+				}
+				ctx.Writer.Header().Set("Content-Type", "application/octet-stream")
+				ctx.Writer.Header().Set("Content-Disposition", `attachment; filename="`+server_file.Name+`"`)
+				ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(server_file.Size, 10))
+				if ctx.Writer.Compress {
+					panic("compression should not pick up")
+				}
+				_, err = io.CopyN(ctx.Writer, s, server_file.Size)
+				if err != nil {
+					log.Println(err)
+					panic(err)
+				}
+				s.Close()
+
+			}
+		} else {
+			if file["type"].(string) == "2" { //it's a directory
+				files, err := s.GetStorage(ctx).GetFiles(path, file["start_commit_id"].(string), share["max_commit_id"].(string), share["partition_id"].(string))
+				if err != nil {
+					panic(err)
+				}
+				data := struct {
+					Path  string
+					Files []map[string]interface{}
+				}{Files: files}
+				data.Path = filepath.Base(share["path"].(string))
+				if relative_path != "" {
+					data.Path += "/" + relative_path
+				}
+				model := s.newPageModel(ctx, data)
+				model.PageTitle = filepath.Join("/", path)
+				ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
+					if file["type"] == "1" {
+						return s.generateShareUrl(filepath.Join("/", relative_path, "/", file["name"].(string)), token, "1"), nil
+					} else {
+						return s.generateShareUrl(filepath.Join("/", relative_path, "/", file["name"].(string)), token, "0"), nil
+
+					}
+				}
+				ctx.FuncMap["isHidden"] = func(isHidden bool) (string, error) {
+					if isHidden {
+						return "true", nil
+					} else {
+						return "false", nil
+					}
+				}
+				ctx.RenderPage(model, "templates/layout.html", "templates/share_file_list.html")
+			} else {
+			}
+
+		}
+	})
+	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File, s.fileDetailsHandler())
 	root.GET(Path_File_List, s.fileListHandler())
-	root.GET(Path_Login, s.loginHandler())
-	root.GET(Path_Login_Callback, s.loginCallbackHandler())
+	open.GET(Path_Login, s.loginHandler())
+	open.GET(Path_Login_Callback, s.loginCallbackHandler())
 	root.POST(Path_Logout, s.logoutHandler())
 	root.DELETE(Path_File, s.fileDeleteHandler())
 	root.GET(Path_Server, s.serverHandler())
@@ -95,6 +175,29 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_File_Rename, s.fileRenameHandler())
 	root.POST(Path_File_Rename, s.fileRenamePostHandler())
 	open.POST(Path_File_Upload, s.fileUploadPostHandler())
+	root.POST(Path_File_Share, s.fileSharePostHandler())
+}
+
+//dl value: 0 not download, 1 download
+func (s *FileSyncWebServer) generateShareUrl(path string, token string, dl string) string {
+	if dl != "1" && dl != "0" {
+		panic("parameter error:dl")
+	}
+	return "/sh/" + token + path + "?dl=" + dl
+}
+func (s *FileSyncWebServer) fileSharePostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		path := ctx.Request.FormValue("path")
+		commit_id := ctx.Request.FormValue("commit_id")
+		max_commit_id := ctx.Request.FormValue("max_commit_id")
+		partition_id := s.MustGetLoginUser(ctx).Partition_id
+		if max_commit_id == "" {
+			commit := s.GetStorage(ctx).GetPartitionLatestCommit(partition_id)
+			max_commit_id = commit["id"].(string)
+		}
+		token := s.GetStorage(ctx).AddShare(path, partition_id, commit_id, max_commit_id, s.MustGetLoginUser(ctx).Id)
+		ctx.Success(s.generateShareUrl("", token, "0"))
+	}
 }
 
 func (s *FileSyncWebServer) fileRenameHandler() goweb.HandlerFunc {
@@ -248,6 +351,8 @@ func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
 			user := s.GetStorage(ctx).GetUserByOpId(session.Claims["sub"].(string))
 			ctx.Data["user"] = user
+		} else {
+			http.Redirect(ctx.Writer, ctx.Request, Path_Login, 302)
 		}
 	}
 }
@@ -257,7 +362,7 @@ func (s *FileSyncWebServer) authenticateHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		http.Redirect(ctx.Writer, ctx.Request, Path_File_List, 302)
+		http.Redirect(ctx.Writer, ctx.Request, Path_File_List+"?path=/", 302)
 	}
 }
 
@@ -276,7 +381,9 @@ func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		path := ctx.Request.FormValue("path")
-		files, err := s.GetStorage(ctx).GetFiles(path, nil, common.MaxInt64, s.MustGetLoginUser(ctx).Partition_id)
+		commit_id := ctx.Request.FormValue("commit_id")
+		max_commit_id := ctx.Request.FormValue("max")
+		files, err := s.GetStorage(ctx).GetFiles(path, commit_id, max_commit_id, s.MustGetLoginUser(ctx).Partition_id)
 		if err != nil {
 			panic(err)
 		}
@@ -284,11 +391,12 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			Path             string
 			Files            []map[string]interface{}
 			DirectoryUrlPath string
+			ShareUrlPath     string
 			Path_File_Edit   string
 			Path_File_Move   string
 			Path_File_Rename string
 			File_Path        string
-		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, File_Path: filepath.Join("/", path), Path_File_Rename: Path_File_Rename}
+		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, File_Path: filepath.Join("/", path), Path_File_Rename: Path_File_Rename, ShareUrlPath: Path_File_Share}
 		ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
 			if file["type"] == "1" {
 				parameters := url.Values{}
@@ -299,6 +407,7 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 				parameters := url.Values{}
 				parameters.Add("path", filepath.Join("/", path, file["name"].(string)))
 				parameters.Add("commit_id", file["commit_id"].(string))
+				parameters.Add("max", max_commit_id)
 				return Path_File_List + "?" + parameters.Encode(), nil
 			}
 		}
@@ -324,6 +433,14 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		commit_id := ctx.Request.FormValue("commit_id")
 		histories := s.GetStorage(ctx).GetHistoryRevisions(path, login_user.Partition_id)
 		var m_file map[string]interface{} = nil
+		var m_file_latest map[string]interface{} = nil
+		var latest_revision_url = ""
+		if len(histories) > 0 {
+			m_file = histories[0]
+			m_file_latest = histories[0]
+		} else if m_file == nil {
+			panic("the file does not exist")
+		}
 		if commit_id != "" {
 			for _, his := range histories {
 				if his["commit_id"].(string) == commit_id {
@@ -331,11 +448,12 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 					break
 				}
 			}
-		} else if len(histories) > 0 {
-			m_file = histories[0]
 		}
-		if m_file == nil {
-			panic("the file does not exist")
+		if m_file_latest["commit_id"].(string) != m_file["commit_id"].(string) {
+			parameters := url.Values{}
+			parameters.Add("path", filepath.Join("/", path))
+			parameters.Add("commit_id", m_file_latest["commit_id"].(string))
+			latest_revision_url = Path_File + "?" + parameters.Encode()
 		}
 		id := m_file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(id)
@@ -353,14 +471,15 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		p := url.Values{}
 		p.Add("path", path)
 		model := struct {
-			DownloadUrl string
-			DeleteUrl   string
-			FileId      string
-			File        models.File
-			ServerFile  models.ServerFile
-			CanDelete   bool
-			HistoryUrl  string
-		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode()}
+			DownloadUrl         string
+			DeleteUrl           string
+			FileId              string
+			File                models.File
+			ServerFile          models.ServerFile
+			CanDelete           bool
+			HistoryUrl          string
+			Latest_revision_url string
+		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
 }

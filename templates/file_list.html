@@ -4,6 +4,7 @@
         <a  class="btn btn-primary"href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
         <a  class="btn btn-primary directory-move" href="#">move</a>
         <a  class="btn btn-primary directory-rename" href="#">rename</a>
+        <a  class="btn btn-primary directory-share" href="#">share</a>
         <a  class="btn btn-primary directory-remove" href="#">remove</a>
     </div>
     <table class="table">
@@ -51,6 +52,40 @@
                 success: function(result) {
                 if(result.error==null){  
                     document.location.reload(true)
+                }else{
+                    alert(result.error)
+                }
+                }
+            })
+             }
+             return//just return,does not care other checked boxes if any.
+        })
+    })
+    var share_url="{{.ShareUrlPath}}"
+    $(".directory-share").on("click",function(){
+        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes,function(){
+            var name=$(this).parents("tr").attr("name")
+            var commit_id=$(this).parents("tr").attr("commit_id")
+            var path=new URLSearchParams(location.search).get("path")
+            var max_commit_id=new URLSearchParams(location.search).get("max")
+            if(confirm("are you sure to publicly share '"+name+"' ?")){
+                var parameters={
+                    commit_id:commit_id,
+                    max_commit_id:max_commit_id
+                }
+                if (path=="/"){
+                    parameters.path="/"+name
+                }else{
+                    parameters.path=path+"/"+name
+                }
+                $.ajax({
+                url: share_url,
+                type: 'POST',
+                data:$.param(parameters),
+                success: function(result) {
+                if(result.error==null){  
+                    window.open(result.data,"_blank")
                 }else{
                     alert(result.error)
                 }

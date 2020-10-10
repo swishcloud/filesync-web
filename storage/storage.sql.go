@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/swishcloud/gostudy/keygenerator"
+
 	"github.com/google/uuid"
 
 	_ "github.com/lib/pq"
@@ -41,7 +43,33 @@ func (m *SQLManager) Commit() error {
 func (m *SQLManager) Rollback() error {
 	return m.Tx.Rollback()
 }
-
+func (m *SQLManager) GetPartitionLatestCommit(partition_id string) map[string]interface{} {
+	query := `select * from commit where partition_id=$1 order by index desc limit 1`
+	return m.Tx.ScanRow(query, partition_id)
+}
+func (m *SQLManager) GetShareByToken(token string) map[string]interface{} {
+	query := `select * from public.share where token=$1`
+	row := m.Tx.ScanRow(query, token)
+	return row
+}
+func (m *SQLManager) AddShare(path string, partition_id string, commit_id string, max_commit_id string, user_id string) (token string) {
+	//check if the sharing record already exists.
+	query := `select * from public.share where path=$1 and commit_id=$2 and max_commit_id=$3`
+	row := m.Tx.ScanRow(query, path, commit_id, max_commit_id)
+	if row != nil {
+		return row["token"].(string)
+	}
+	//create a new sharing record.
+	token, err := keygenerator.NewKey(15, false, true, false, true)
+	if err != nil {
+		panic(err)
+	}
+	sql := `INSERT INTO public.share(
+		id, token, path, commit_id, max_commit_id, insert_time, user_id,partition_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7,$8);`
+	m.Tx.MustExec(sql, uuid.New(), token, path, commit_id, max_commit_id, time.Now().UTC(), user_id, partition_id)
+	return token
+}
 func (m *SQLManager) GetExactFileByPath(path string, partition_id string) map[string]interface{} {
 	query := `
 	WITH RECURSIVE CTE AS (
@@ -278,12 +306,28 @@ func (m *SQLManager) GetFile(id string) models.File {
 		panic("not found")
 	}
 }
-func (m *SQLManager) GetFiles(path string, commit_id *string, revision int64, partition_id string) (files []map[string]interface{}, err error) {
+func (m *SQLManager) getCommitById(commit_id string) map[string]interface{} {
+	query := "select * from commit where id=$1"
+	return m.Tx.ScanRow(query, commit_id)
+}
+func (m *SQLManager) getParents(path string, file_id string, commit_id string) []map[string]interface{} {
+	query := `WITH RECURSIVE CTE as(
+		select start_commit_id,p_file_id,cast ($1 as text) as path from file a
+		where file_id=$2 and type=2 and is_deleted=false and end_commit_id is null and start_commit_id=$3
+		UNION ALL 
+		select file.start_commit_id,file.p_file_id,trim(trailing '/' from substring(CTE.path from '.*/')) from file
+		inner join commit a on file.start_commit_id=a.id
+		left join commit b on file.end_commit_id=b.id
+		inner join CTE on file.file_id=CTE.p_file_id)select * from CTE 
+		`
+	return m.Tx.ScanRows(query, path, file_id, commit_id)
+}
+func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id string, partition_id string) (files []map[string]interface{}, err error) {
 	histories := m.GetHistoryRevisions(path, partition_id)
 	var directory map[string]interface{} = nil
-	if commit_id != nil {
+	if commit_id != "" {
 		for _, his := range histories {
-			if his["commit_id"].(string) == *commit_id {
+			if his["commit_id"].(string) == commit_id {
 				directory = his
 				break
 			}
@@ -294,6 +338,15 @@ func (m *SQLManager) GetFiles(path string, commit_id *string, revision int64, pa
 	if directory == nil {
 		return nil, errors.New("the directory does not exist.")
 	}
+	file_id := directory["file_id"].(string)
+	max_revision := common.MaxInt64
+	if max_commit_id != "" {
+		max_commit := m.getCommitById(max_commit_id)
+		if max_commit == nil {
+			return nil, errors.New("parameter error.")
+		}
+		max_revision, err = strconv.ParseInt(max_commit["index"].(string), 10, 64)
+	}
 	directory_commit_id := directory["commit_id"].(string)
 	directory_commit_index, err := strconv.ParseInt(directory["commit_index"].(string), 10, 64)
 	if err != nil {
@@ -303,8 +356,8 @@ func (m *SQLManager) GetFiles(path string, commit_id *string, revision int64, pa
 	inner join commit start_commit on file.start_commit_id=start_commit.id
 	left join commit end_commit on file.end_commit_id=end_commit.id
 	left join file_info on file.file_info_id=file_info.id
-	where file.p_file_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2)`
-	return m.Tx.ScanRows(query, directory["file_id"].(string), revision, directory_commit_index, directory_commit_id), nil
+	where file.p_file_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2) order by file.name`
+	return m.Tx.ScanRows(query, file_id, max_revision, directory_commit_index, directory_commit_id), nil
 }
 
 // func (m *SQLManager) GetFiles(p_file_id, partition_id string, revision int64) []models.File {
