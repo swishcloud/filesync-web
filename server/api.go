@@ -21,6 +21,7 @@ const (
 	API_PATH_Auth_Code_Url  = "/api/auth_code_url"
 	API_PATH_Directory      = "/api/directory"
 	API_PATH_Log            = "/api/log"
+	API_PATH_Commit_Changes = "/api/commit/changes"
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
@@ -39,6 +40,7 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.POST(API_PATH_Directory, s.directoryApiPostHandler())
 	group.GET(API_PATH_Directory, s.directoryApiGetHandler())
 	group.GET(API_PATH_Log, s.logApiGetHandler())
+	group.GET(API_PATH_Commit_Changes, s.commitChangesGetHandler())
 }
 
 func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
@@ -244,5 +246,16 @@ func (s *FileSyncWebServer) logApiGetHandler() goweb.HandlerFunc {
 		}
 		log := s.GetStorage(ctx).GetLogs(start_number, s.MustGetLoginUser(ctx).Id)
 		ctx.Success(log) */
+	}
+}
+func (s *FileSyncWebServer) commitChangesGetHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		partition_id := s.MustGetLoginUser(ctx).Partition_id
+		commits := s.GetStorage(ctx).GetCommits(partition_id, s.GetStorage(ctx).GetPartitionFirstCommit(partition_id)["id"].(string))
+		for _, v := range commits {
+			changes := s.GetStorage(ctx).GetCommitChanges(partition_id, v["id"].(string))
+			v["changes"] = changes
+		}
+		ctx.Success(commits)
 	}
 }

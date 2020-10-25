@@ -3,8 +3,9 @@ package storage
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
-	"strings"
+	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -30,7 +31,7 @@ func (action CreateDirectoryAction) Do(m *fileManager) error {
 			if path != "/" {
 				return errors.New("can not find root directory at all")
 			}
-			m.insertFile("", uuid.New().String(), nil, nil, false, 2)
+			m.insertFile("", uuid.New().String(), nil, nil, false, 2, nil)
 			return nil
 		}
 		p := file["path"].(string)
@@ -43,7 +44,7 @@ func (action CreateDirectoryAction) Do(m *fileManager) error {
 			}
 			name = regexp.FindString(name)
 			fmt.Println("found parent directory " + p + " for " + path + ",creating directory " + name + " under it.")
-			m.insertFile(name, uuid.New().String(), &loop_file_id, nil, action.IsHidden, 2)
+			m.insertFile(name, uuid.New().String(), &loop_file_id, nil, action.IsHidden, 2, nil)
 		} else {
 			if file["type"].(string) != "2" {
 				return errors.New("There is already a file with the same path as you specified:" + path)
@@ -77,7 +78,7 @@ func (action CreateFileAction) Do(m *fileManager) error {
 		return errors.New("can not find the destination path.")
 	}
 	p_file_id := location["file_id"].(string)
-	m.insertFile(action.Name, uuid.New().String(), &p_file_id, &action.Md5, action.IsHidden, 1)
+	m.insertFile(action.Name, uuid.New().String(), &p_file_id, &action.Md5, action.IsHidden, 1, nil)
 	return nil
 }
 
@@ -99,17 +100,21 @@ type RenameAction struct {
 }
 
 func (action RenameAction) Do(m *fileManager) error {
-	err := validatePathFormat("/" + action.NewName)
+	index, err := strconv.ParseInt(m.m.getCommitById(m.commit_id)["index"].(string), 10, 64)
 	if err != nil {
 		return err
 	}
-	if _, exist := m.isExists(action.Id); !exist {
-		return errors.New("this source file does not exist.")
-	}
-	m.deleteFile(action.Id)
-	file := m.m.GetFile(action.Id)
-	m.insertFile(action.NewName, file.File_id, file.P_file_id, file.Md5, file.Is_hidden, file.Type)
-	return nil
+	path := m.m.GetFilePath(m.partition_id, action.Id, index-1)
+	return m.copyFile(action.Id, filepath.Dir(path), &action.NewName, true)
+}
+
+type CopyAction struct {
+	Id              string
+	DestinationPath string
+}
+
+func (action CopyAction) Do(m *fileManager) error {
+	return m.copyFile(action.Id, action.DestinationPath, nil, false)
 }
 
 type MoveAction struct {
@@ -118,37 +123,7 @@ type MoveAction struct {
 }
 
 func (action MoveAction) Do(m *fileManager) error {
-	err := validatePathFormat(action.DestinationPath)
-	if err != nil {
-		return err
-	}
-	source_path, exist := m.isExists(action.Id)
-	if !exist {
-		return errors.New("this source file does not exist.")
-	}
-
-	f := m.m.GetExactFileByPath(action.DestinationPath, m.partition_id)
-	if f == nil {
-		return errors.New("can not find the destination path.")
-	}
-
-	source_file := m.m.GetFile(action.Id)
-	destination_file := m.m.GetFile(f["id"].(string))
-
-	if destination_file.Type != 2 {
-		return errors.New("the destination path is not a folder.")
-	}
-
-	if action.DestinationPath == source_path {
-		return errors.New("the source path can not be same as the destination path.")
-	}
-	if source_file.Type == 2 && strings.Index(action.DestinationPath, source_path) == 0 {
-		return errors.New("can not move a directory into a subdirectory of itself.")
-	}
-
-	m.deleteFile(source_file.Id)
-	m.insertFile(source_file.Name, source_file.File_id, &destination_file.File_id, source_file.Md5, source_file.Is_hidden, source_file.Type)
-	return nil
+	return m.copyFile(action.Id, action.DestinationPath, nil, true)
 }
 
 func validatePathFormat(path string) error {

@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="container">
+    <table class="table">
+        <tr><th>path</th><th>source</th><th>type</th></tr>
+        {{range .Changes}}
+        <tr><td>{{.Path}}</td>
+            <td>{{.Source_Path}}</td>            
+        <td>
+            {{if eq .ChangeType 1}}
+                add
+                {{else if eq .ChangeType 2}}
+                delete
+                {{else if eq .ChangeType 3}}
+                move
+                {{else if eq .ChangeType 4}}
+                rename
+                {{else if eq .ChangeType 5}}
+                copy
+                {{end}}
+        </td>
+        </tr>
+        {{end}}
+    </table>
+</div>
+{{end}}
+{{define "scripts"}}
+<script>
+   
+</script>
+{{end}}

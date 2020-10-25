@@ -51,22 +51,25 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 }
 
 const (
-	Path_Index          = "/"
-	Path_File           = "/file"
-	Path_File_Rename    = "/file_rename"
-	Path_File_Edit      = "/file_edit"
-	Path_File_History   = "/file/history"
-	Path_File_Move      = "/file_move"
-	Path_File_List      = "/file/list"
-	Path_Login          = "/login"
-	Path_Login_Callback = "/login-callback"
-	Path_Logout         = "/logout"
-	Path_Download_File  = "/file/download"
-	Path_Server         = "/server"
-	Path_Server_Edit    = "/server_edit"
-	Path_Directory      = "/directory"
-	Path_File_Upload    = "/file/upload"
-	Path_File_Share     = "/file/share"
+	Path_Index              = "/"
+	Path_File               = "/file"
+	Path_File_Rename        = "/file_rename"
+	Path_File_Edit          = "/file_edit"
+	Path_File_History       = "/file/history"
+	Path_File_Move          = "/file_move"
+	Path_File_Copy          = "/file_copy"
+	Path_File_List          = "/file/list"
+	Path_Login              = "/login"
+	Path_Login_Callback     = "/login-callback"
+	Path_Logout             = "/logout"
+	Path_Download_File      = "/file/download"
+	Path_Server             = "/server"
+	Path_Server_Edit        = "/server_edit"
+	Path_Directory          = "/directory"
+	Path_File_Upload        = "/file/upload"
+	Path_File_Share         = "/file/share"
+	Path_File_Commit        = "/file/commit"
+	Path_File_Commit_Detail = "/file/commit/detail"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
@@ -171,11 +174,15 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.POST(Path_File_Edit, s.fileEditPostHandler())
 	root.GET(Path_File_Move, s.fileMoveHandler())
 	root.POST(Path_File_Move, s.fileMovePostHandler())
+	root.GET(Path_File_Copy, s.fileCopyHandler())
+	root.POST(Path_File_Copy, s.fileCopyPostHandler())
 	root.GET(Path_File_History, s.fileHistoryHandler())
 	root.GET(Path_File_Rename, s.fileRenameHandler())
 	root.POST(Path_File_Rename, s.fileRenamePostHandler())
 	open.POST(Path_File_Upload, s.fileUploadPostHandler())
 	root.POST(Path_File_Share, s.fileSharePostHandler())
+	root.GET(Path_File_Commit, s.fileCommitHandler())
+	root.GET(Path_File_Commit_Detail, s.fileCommitDetailHandler())
 }
 
 //dl value: 0 not download, 1 download
@@ -277,6 +284,25 @@ func (s *FileSyncWebServer) fileMovePostHandler() goweb.HandlerFunc {
 		destination := ctx.Request.FormValue("destination")
 		actions := []storage.Action{}
 		action := storage.MoveAction{Id: id, DestinationPath: destination}
+		actions = append(actions, action)
+		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+			panic(err)
+		}
+		ctx.Success(nil)
+	}
+}
+
+func (s *FileSyncWebServer) fileCopyHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		ctx.RenderPage(s.newPageModel(ctx, nil), "templates/layout.html", "templates/file_copy.html")
+	}
+}
+func (s *FileSyncWebServer) fileCopyPostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		destination := ctx.Request.FormValue("destination")
+		actions := []storage.Action{}
+		action := storage.CopyAction{Id: id, DestinationPath: destination}
 		actions = append(actions, action)
 		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
@@ -396,9 +422,10 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			ShareUrlPath     string
 			Path_File_Edit   string
 			Path_File_Move   string
+			Path_File_Copy   string
 			Path_File_Rename string
 			File_Path        string
-		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, File_Path: filepath.Join("/", path), Path_File_Rename: Path_File_Rename, ShareUrlPath: Path_File_Share}
+		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, Path_File_Copy: Path_File_Copy, File_Path: filepath.Join("/", path), Path_File_Rename: Path_File_Rename, ShareUrlPath: Path_File_Share}
 		ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
 			if file["type"] == "1" {
 				parameters := url.Values{}
@@ -620,5 +647,77 @@ func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 			panic(err)
 		}
 		s.Close()
+	}
+}
+
+func (s *FileSyncWebServer) fileCommitHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		commits := s.GetStorage(ctx).GetRecentCommits(s.MustGetLoginUser(ctx).Partition_id)
+		model := struct {
+			Commits []map[string]interface{}
+		}{Commits: commits}
+		ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
+			return Path_File_Commit_Detail + "?id=" + file["id"].(string), nil
+		}
+		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_commit.html")
+	}
+}
+
+type FileChange struct {
+	Id          string
+	Path        string
+	ChangeType  int //1 add,2 delete,3 move,4 rename,5 copy
+	Source_Path string
+}
+
+func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		commit_id := ctx.Request.FormValue("id")
+		user := s.MustGetLoginUser(ctx)
+		commit := s.GetStorage(ctx).GetCommitById(commit_id)
+		commit_index, err := strconv.ParseInt(commit["index"].(string), 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		changes := s.GetStorage(ctx).GetCommitChanges(user.Partition_id, commit_id)
+		file_changes := []FileChange{}
+		for _, v := range changes {
+			change := FileChange{}
+			id := v["id"].(string)
+			change.Id = id
+			var path string
+			if commit_id == v["start_commit_id"].(string) {
+				path = s.GetStorage(ctx).GetFilePath(user.Partition_id, id, commit_index)
+				change.ChangeType = 1
+			} else if commit_id == v["end_commit_id"].(string) {
+				path = s.GetStorage(ctx).GetFilePath(user.Partition_id, id, commit_index-1)
+				change.ChangeType = 2
+			}
+			change.Path = path
+			if v["source"] != nil {
+				for i, v2 := range file_changes {
+					if v2.Id == v["source"].(string) {
+						file_changes = append(file_changes[:i], file_changes[i+1:]...)
+						change.Source_Path = v2.Path
+						if filepath.Dir(change.Path) == filepath.Dir(v2.Path) {
+							change.ChangeType = 4
+						} else {
+							change.ChangeType = 3
+						}
+						break
+					}
+				}
+				if change.Source_Path == "" {
+					change.Source_Path = s.GetStorage(ctx).GetFilePath(user.Partition_id, v["source"].(string), commit_index-1)
+					change.ChangeType = 5
+				}
+			}
+			file_changes = append(file_changes, change)
+		}
+		model := struct {
+			Str     string
+			Changes []FileChange
+		}{Str: fmt.Sprintln(changes), Changes: file_changes}
+		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_commit_detail.html")
 	}
 }

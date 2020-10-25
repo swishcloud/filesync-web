@@ -2,6 +2,7 @@
 <div class="container">
     <div class="mb-3">
         <a  class="btn btn-primary"href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
+        <a  class="btn btn-primary directory-copy" href="#">copy</a>
         <a  class="btn btn-primary directory-move" href="#">move</a>
         <a  class="btn btn-primary directory-rename" href="#">rename</a>
         <a  class="btn btn-primary directory-share" href="#">share</a>
@@ -110,6 +111,25 @@
                 id:id
             }
             var url=file_move_path+"?"+$.param(parameters)
+            document.location.href=url
+            return//just return,does not care other if any.
+        })
+    })
+    var file_copy_path="{{.Path_File_Copy}}"
+    $(".directory-copy").on("click",function(){
+        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes,function(){
+            var directory="{{.File_Path}}"
+            var name=$(this).parents("tr").attr("name")
+            var file_type=$(this).parents("tr").attr("file_type")
+            var id=$(this).parents("tr").attr("id")
+            var parameters={
+                directory:directory,
+                name:name,
+                file_type:file_type,
+                id:id
+            }
+            var url=file_copy_path+"?"+$.param(parameters)
             document.location.href=url
             return//just return,does not care other if any.
         })
