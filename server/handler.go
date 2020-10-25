@@ -694,7 +694,7 @@ func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
 				change.ChangeType = 2
 			}
 			change.Path = path
-			if v["source"] != nil {
+			if change.ChangeType == 1 && v["source"] != nil {
 				for i, v2 := range file_changes {
 					if v2.Id == v["source"].(string) {
 						file_changes = append(file_changes[:i], file_changes[i+1:]...)
