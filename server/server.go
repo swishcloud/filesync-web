@@ -26,14 +26,15 @@ import (
 )
 
 type Config struct {
-	Listen_ip     string      `yaml:"listen_ip"`
-	FILE_LOCATION string      `yaml:"file_location"`
-	DB_CONN_INFO  string      `yaml:"db_conn_info"`
-	OAuth         ConfigOAuth `yaml:"oauth"`
-	upload_folder string
-	temp_folder   string
-	Tls_cert_file string `yaml:"tls_cert_file"`
-	Tls_key_file  string `yaml:"tls_key_file"`
+	Listen_ip      string      `yaml:"listen_ip"`
+	Website_domain string      `yaml:"website_domain"`
+	FILE_LOCATION  string      `yaml:"file_location"`
+	DB_CONN_INFO   string      `yaml:"db_conn_info"`
+	OAuth          ConfigOAuth `yaml:"oauth"`
+	upload_folder  string
+	temp_folder    string
+	Tls_cert_file  string `yaml:"tls_cert_file"`
+	Tls_key_file   string `yaml:"tls_key_file"`
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`
