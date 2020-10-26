@@ -67,7 +67,7 @@ func (m *SQLManager) GetRecentCommits(partition_id string) []map[string]interfac
 }
 
 func (m *SQLManager) GetCommitChanges(partition_id string, commit_id string) []map[string]interface{} {
-	query := `select file.*,file_info.md5 from file left join file_info on file.file_info_id=file_info.id where partition_id=$1 and (start_commit_id=$2 or end_commit_id=$2)`
+	query := `select file.*,file_info.md5,case when end_commit_id=$2 then true else false end as del from file left join file_info on file.file_info_id=file_info.id where partition_id=$1 and (start_commit_id=$2 or end_commit_id=$2) order by del desc`
 	return m.Tx.ScanRows(query, partition_id, commit_id)
 }
 func (m *SQLManager) GetShareByToken(token string) map[string]interface{} {
