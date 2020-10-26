@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"image/png"
 	"io"
 	"log"
 	"net"
@@ -14,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/boombuler/barcode"
+	"github.com/boombuler/barcode/qr"
 	"github.com/swishcloud/filesync-web/storage"
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/filesync/message"
@@ -70,6 +73,7 @@ const (
 	Path_File_Share         = "/file/share"
 	Path_File_Commit        = "/file/commit"
 	Path_File_Commit_Detail = "/file/commit/detail"
+	Path_QRCode             = "/qr_code"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
@@ -88,6 +92,9 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		partition_id := share["partition_id"].(string)
 		dl := ctx.Request.FormValue("dl")
 		file := s.GetStorage(ctx).GetExactFileByPath(path, partition_id)
+		file_identifier := file["id"].(string)
+		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_identifier)
+		typed_file := s.GetStorage(ctx).GetFile(file_identifier)
 		if file == nil {
 			panic("not found")
 		}
@@ -153,6 +160,20 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 				}
 				ctx.RenderPage(model, "templates/layout.html", "templates/share_file_list.html")
 			} else {
+				data := struct {
+					DownloadUrl string
+					QRCodeUrl   string
+					Path        string
+					File        models.File
+					ServerFile  models.ServerFile
+				}{Path: path, File: typed_file, ServerFile: *server_file}
+				data.DownloadUrl = "https://" + ctx.Request.Host + s.generateShareUrl("", token, "1")
+				parameters := url.Values{}
+				parameters.Add("str", "https://"+ctx.Request.Host+s.generateShareUrl("", token, "0"))
+				data.QRCodeUrl = Path_QRCode + "?" + parameters.Encode()
+				model := s.newPageModel(ctx, data)
+				model.PageTitle = data.Path
+				ctx.RenderPage(model, "templates/layout.html", "templates/share_file_detail.html")
 			}
 
 		}
@@ -183,6 +204,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.POST(Path_File_Share, s.fileSharePostHandler())
 	root.GET(Path_File_Commit, s.fileCommitHandler())
 	root.GET(Path_File_Commit_Detail, s.fileCommitDetailHandler())
+	open.GET(Path_QRCode, s.qrCodeHandler())
 }
 
 //dl value: 0 not download, 1 download
@@ -719,5 +741,14 @@ func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
 			Changes []FileChange
 		}{Str: fmt.Sprintln(changes), Changes: file_changes}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_commit_detail.html")
+	}
+}
+
+func (s *FileSyncWebServer) qrCodeHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		str := ctx.Request.FormValue("str")
+		qrCode, _ := qr.Encode(str, qr.L, qr.Auto)
+		qrCode, _ = barcode.Scale(qrCode, 300, 300)
+		png.Encode(ctx.Writer, qrCode)
 	}
 }
