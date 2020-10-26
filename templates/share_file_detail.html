@@ -1,0 +1,32 @@
+{{define "content"}}
+<div class="container">
+    <div class="text-center">
+        <span class="font-weight-bold">{{.ServerFile.Name}}</span>
+    </div>
+    <div>
+        <span>file size:</span>  <span>{{.ServerFile.Size}} bytes</span>
+    </div>
+    <div>
+        <span>upload time:</span>  <span>{{formatTime .File.InsertTime ""}}</span>
+    </div>
+    <div>
+        <span>user:</span>  <span>{{.File.UserName}}</span>
+    </div>
+    <div>
+        <span>description:</span>  <span>{{.File.Description}}</span>
+    </div>
+    <div>
+        <span>revision:</span>  <span>{{.File.Commit_id}}</span>
+    </div>
+    <div class="my-3">
+        <a class="btn btn-primary" href="{{.DownloadUrl}}">download</a>
+    </div>
+    <img src="{{.QRCodeUrl}}">
+    <p>scan qr code to download via mobile phone</p>
+</div>
+{{end}}
+{{define "scripts"}}
+<script>
+    
+</script>
+{{end}}
