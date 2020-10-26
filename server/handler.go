@@ -79,7 +79,7 @@ const (
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open := root.Group()
 	root.Use(s.genericMiddleware())
-	root.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
+	open.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
 		http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))).ServeHTTP(context.Writer, context.Request)
 	})
 	open.RegexMatch(regexp.MustCompile(`/sh/.+`), func(ctx *goweb.Context) {
