@@ -145,7 +145,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 				model.PageTitle = data.Path
 				ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
 					if file["type"] == "1" {
-						return s.generateShareUrl(filepath.Join("/", relative_path, "/", file["name"].(string)), token, "1"), nil
+						return s.generateShareUrl(filepath.Join("/", relative_path, "/", file["name"].(string)), token, "0"), nil
 					} else {
 						return s.generateShareUrl(filepath.Join("/", relative_path, "/", file["name"].(string)), token, "0"), nil
 
