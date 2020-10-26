@@ -1,7 +1,9 @@
 {{define "content"}}
 <div class="container">
+        <input id="file" style="display:none" type="file" onchange="uploadFile(this)" >
     <div class="mb-3">
         <a  class="btn btn-primary"href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
+        <a  class="btn btn-primary" href="javascript::#" onclick='$("#file").click();'>upload file</a>
         <a  class="btn btn-primary directory-copy" href="#">copy</a>
         <a  class="btn btn-primary directory-move" href="#">move</a>
         <a  class="btn btn-primary directory-rename" href="#">rename</a>
@@ -36,6 +38,21 @@
 {{end}}
 {{define "scripts"}}
 <script>
+    async function uploadFile(inp) 
+{
+    let formData = new FormData();
+    let file = inp.files[0];      
+         
+    formData.append("file", file);
+    
+    try {
+       let r = await fetch('/upload/image', {method: "POST", body: formData}); 
+       console.log('HTTP response code:',r.status); 
+    } catch(e) {
+       console.log(e);
+    }
+    
+}
     var delete_directory_url="{{.DirectoryUrlPath}}"
     $(".directory-remove").on("click",function(){
         var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
