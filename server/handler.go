@@ -89,9 +89,18 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		relative_path := strings.Join(strs[2:], "/")
 		share := s.GetStorage(ctx).GetShareByToken(token)
 		path := filepath.Join(share["path"].(string), relative_path)
-		partition_id := share["partition_id"].(string)
+		share_partition_id := share["partition_id"].(string)
 		dl := ctx.Request.FormValue("dl")
-		file := s.GetStorage(ctx).GetExactFileByPath(path, partition_id)
+		share_max_commit_id := share["max_commit_id"].(string)
+		max_commit := s.GetStorage(ctx).GetCommitById(share_max_commit_id)
+		if max_commit == nil {
+			panic("parameter error.")
+		}
+		share_max_revision, err := strconv.ParseInt(max_commit["index"].(string), 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		file := s.GetStorage(ctx).GetHistoryRevisions(path, share_partition_id, share_max_revision)[0]
 		file_identifier := file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_identifier)
 		typed_file := s.GetStorage(ctx).GetFile(file_identifier)
@@ -129,7 +138,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 			}
 		} else {
 			if file["type"].(string) == "2" { //it's a directory
-				files, err := s.GetStorage(ctx).GetFiles(path, file["start_commit_id"].(string), share["max_commit_id"].(string), share["partition_id"].(string))
+				files, err := s.GetStorage(ctx).GetFiles(path, file["commit_id"].(string), share_max_commit_id, share_partition_id)
 				if err != nil {
 					panic(err)
 				}
@@ -166,7 +175,8 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 					Path        string
 					File        models.File
 					ServerFile  models.ServerFile
-				}{Path: path, File: typed_file, ServerFile: *server_file}
+					History     map[string]interface{}
+				}{Path: path, File: typed_file, ServerFile: *server_file, History: file}
 				data.DownloadUrl = "https://" + s.config.Website_domain + s.generateShareUrl("", token, "1")
 				parameters := url.Values{}
 				parameters.Add("str", "https://"+s.config.Website_domain+s.generateShareUrl("", token, "0"))
@@ -256,7 +266,7 @@ func (s *FileSyncWebServer) fileRenamePostHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) fileHistoryHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		path := ctx.Request.FormValue("path")
-		histories := s.GetStorage(ctx).GetHistoryRevisions(path, s.MustGetLoginUser(ctx).Partition_id)
+		histories := s.GetStorage(ctx).GetHistoryRevisions(path, s.MustGetLoginUser(ctx).Partition_id, common.MaxInt64)
 		fmt.Println(histories)
 		model := struct {
 			Path      string
@@ -482,7 +492,7 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		}
 		path := ctx.Request.FormValue("path")
 		commit_id := ctx.Request.FormValue("commit_id")
-		histories := s.GetStorage(ctx).GetHistoryRevisions(path, login_user.Partition_id)
+		histories := s.GetStorage(ctx).GetHistoryRevisions(path, login_user.Partition_id, common.MaxInt64)
 		var m_file map[string]interface{} = nil
 		var m_file_latest map[string]interface{} = nil
 		var latest_revision_url = ""
@@ -527,10 +537,11 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 			FileId              string
 			File                models.File
 			ServerFile          models.ServerFile
+			History             map[string]interface{}
 			CanDelete           bool
 			HistoryUrl          string
 			Latest_revision_url string
-		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url}
+		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url, History: m_file}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
 }

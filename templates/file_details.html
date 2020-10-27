@@ -12,7 +12,8 @@
        <span>file size:</span>  <span>{{.ServerFile.Size}} bytes</span>
    </div>
    <div>
-       <span>upload time:</span>  <span>{{formatTime .File.InsertTime ""}}</span>
+        {{$insert_time:=index .History "commit_insert_time"}}
+       <span>upload time:</span>  <span>{{formatTimeString $insert_time ""}}</span>
    </div>
    <div>
        <span>user:</span>  <span>{{.File.UserName}}</span>
@@ -21,7 +22,8 @@
        <span>description:</span>  <span>{{.File.Description}}</span>
    </div>
    <div>
-       <span>revision:</span>  <span>{{.File.Commit_id}}</span>
+        {{$commit_id:=index .History "commit_id"}}
+       <span>revision:</span>  <span>{{$commit_id}}</span>
    </div>
    <div  class="mt-3">       
     <a id="download" href="{{.DownloadUrl}}" class="btn btn-primary">download</a>

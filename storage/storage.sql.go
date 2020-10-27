@@ -161,7 +161,7 @@ func NewFileManager(m *SQLManager, user_id string) *fileManager {
 	d.user_id = user_id
 	return d
 }
-func (m *SQLManager) GetHistoryRevisions(path, partition_id string) []map[string]interface{} {
+func (m *SQLManager) GetHistoryRevisions(path, partition_id string, max_revision int64) []map[string]interface{} {
 	query := `
 	WITH RECURSIVE CTE AS (
 		SELECT file.*,'' as path,commit.index as commit_index from file 
@@ -177,15 +177,15 @@ func (m *SQLManager) GetHistoryRevisions(path, partition_id string) []map[string
 		inner join CTE on file.p_file_id=CTE.file_id
 		where $1 like CTE.path || '/' || file.name || '%' and file.partition_id=$2
 	  )
-	SELECT CTE.*,commit.id as commit_id,commit.index as commit_index,file_info.size,public."user".name as user_name from CTE
+	SELECT CTE.*,commit.insert_time as commit_insert_time,commit.id as commit_id,commit.index as commit_index,file_info.size,public."user".name as user_name from CTE
 	inner join commit on CTE.commit_index=commit.index
 	left join file_info on CTE.file_info_id=file_info.id
 	inner join public."user" on CTE.user_id=public."user".id
-	where (CTE.path=$1 or $1='/') and commit.partition_id=$2
+	where (CTE.path=$1 or $1='/') and commit.partition_id=$2 and CTE.commit_index<=$3
 	order by commit.index desc;
 	`
 	//query = "select *,name as path from file where $1!='1xfafa' and partition_id=$2"
-	rows := m.Tx.ScanRows(query, path, partition_id)
+	rows := m.Tx.ScanRows(query, path, partition_id, max_revision)
 	return rows
 }
 
@@ -383,7 +383,19 @@ func (m *SQLManager) getParents(path string, file_id string, commit_id string) [
 	return m.Tx.ScanRows(query, path, file_id, commit_id)
 }
 func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id string, partition_id string) (files []map[string]interface{}, err error) {
-	histories := m.GetHistoryRevisions(path, partition_id)
+	if max_commit_id == "" {
+		max_commit_id = m.GetPartitionLatestCommit(partition_id)["id"].(string)
+	}
+	max_commit := m.getCommitById(max_commit_id)
+	if max_commit == nil {
+		return nil, errors.New("parameter error.")
+	}
+	max_revision, err := strconv.ParseInt(max_commit["index"].(string), 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	histories := m.GetHistoryRevisions(path, partition_id, max_revision)
 	var directory map[string]interface{} = nil
 	if commit_id != "" {
 		for _, his := range histories {
@@ -399,23 +411,17 @@ func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id strin
 		return nil, errors.New("the directory does not exist.")
 	}
 	file_id := directory["file_id"].(string)
-	if max_commit_id == "" {
-		max_commit_id = m.GetPartitionLatestCommit(partition_id)["id"].(string)
-	}
-	max_commit := m.getCommitById(max_commit_id)
-	if max_commit == nil {
-		return nil, errors.New("parameter error.")
-	}
-	max_revision, err := strconv.ParseInt(max_commit["index"].(string), 10, 64)
 	directory_commit_index, err := strconv.ParseInt(directory["commit_index"].(string), 10, 64)
 	if err != nil {
 		return nil, err
 	}
-	query := `select file.*,case when start_commit.index>$3 then start_commit.id else $4 end as commit_id,file_info.size from file 
+	query := `select T.*,commit.insert_time as commit_insert_time from (select file.*,case when start_commit.index>$3 then start_commit.id else $4 end as commit_id,file_info.size from file 
 	inner join commit start_commit on file.start_commit_id=start_commit.id
 	left join commit end_commit on file.end_commit_id=end_commit.id
 	left join file_info on file.file_info_id=file_info.id
-	where file.p_file_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2) order by file.name`
+	where file.p_file_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2)) T
+	inner join commit on T.commit_id=commit.id
+	order by name`
 	return m.Tx.ScanRows(query, file_id, max_revision, directory_commit_index, directory["commit_id"].(string)), nil
 }
 

@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"log"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -102,9 +101,9 @@ func TestHistories(t *testing.T) {
 	getFiles(manager, "/", partition_id, -1, &paths)
 	printPaths(paths)
 
-	revisions := manager.GetHistoryRevisions("/folder/file", partition_id)
+	revisions := manager.GetHistoryRevisions("/folder/file", partition_id, common.MaxInt64)
 	printRevision(revisions)
-	revisions = manager.GetHistoryRevisions("/folder(renamed)/file", partition_id)
+	revisions = manager.GetHistoryRevisions("/folder(renamed)/file", partition_id, common.MaxInt64)
 	printRevision(revisions)
 }
 
@@ -202,15 +201,15 @@ func printPaths(paths []string) {
 	}
 }
 func getFiles(manager Storage, directory_path, partition_id string, revision int64, paths *[]string) {
-	files, err := manager.GetFiles(directory_path, nil, common.MaxInt64, partition_id)
-	if err != nil {
-		panic(err)
-	}
-	for _, f := range files {
-		full_path := filepath.Join(directory_path, f["name"].(string))
-		*paths = append(*paths, full_path)
-		if f["type"].(string) == "2" {
-			getFiles(manager, full_path, partition_id, revision, paths)
-		}
-	}
+	// files, err := manager.GetFiles(directory_path, nil, common.MaxInt64, partition_id)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// for _, f := range files {
+	// 	full_path := filepath.Join(directory_path, f["name"].(string))
+	// 	*paths = append(*paths, full_path)
+	// 	if f["type"].(string) == "2" {
+	// 		getFiles(manager, full_path, partition_id, revision, paths)
+	// 	}
+	// }
 }

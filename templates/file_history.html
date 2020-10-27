@@ -9,7 +9,7 @@
                 <th>user</th>    
                 </tr>
                 {{range .Histories}}
-                {{$time:=index . "insert_time"}}
+                {{$time:=index . "commit_insert_time"}}
                 <tr >
                    <td><a style="color:blue" href="{{detailUrl .}}">{{index . "commit_id"}}</a></td>
                    <td>{{formatTimeString $time ""}}</td>

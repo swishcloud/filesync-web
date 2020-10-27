@@ -3,7 +3,7 @@
         <input id="file" style="display:none" type="file" onchange="uploadFile(this)" >
     <div class="mb-3">
         <a  class="btn btn-primary"href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
-        <a  class="btn btn-primary" href="javascript::#" onclick='$("#file").click();'>upload file</a>
+        <!-- <a  class="btn btn-primary" href="javascript::#" onclick='$("#file").click();'>upload file</a> -->
         <a  class="btn btn-primary directory-copy" href="#">copy</a>
         <a  class="btn btn-primary directory-move" href="#">move</a>
         <a  class="btn btn-primary directory-rename" href="#">rename</a>
@@ -16,7 +16,7 @@
         </tr>
         {{range .Files}}
         {{$type:=index . "type"}}
-        {{$insert_time:=index . "insert_time"}}
+        {{$insert_time:=index . "commit_insert_time"}}
         {{$size:=index . "size"}}
         <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}' commit_id='{{index . "commit_id"}}'>
             <td><input type="checkbox"></td>
