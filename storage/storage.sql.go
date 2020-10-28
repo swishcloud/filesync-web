@@ -164,18 +164,27 @@ func NewFileManager(m *SQLManager, user_id string) *fileManager {
 func (m *SQLManager) GetHistoryRevisions(path, partition_id string, max_revision int64) []map[string]interface{} {
 	query := `
 	WITH RECURSIVE CTE AS (
-		SELECT file.*,'' as path,commit.index as commit_index from file 
-		inner join commit on file.start_commit_id=commit.id
-		where p_file_id is null and commit.partition_id=$2
+		SELECT file.*,'' as path,start_commit.index as commit_index,
+		start_commit.index as start_commit_index,
+		end_commit.index as end_commit_index
+		from file 
+		inner join commit start_commit on file.start_commit_id=start_commit.id
+		left join commit end_commit on file.end_commit_id=end_commit.id
+		where p_file_id is null and start_commit.partition_id=$2
 	  UNION ALL
 		SELECT file.*,CTE.path || '/' || file.name,
 		case when start_commit.index>CTE.commit_index then start_commit.index
 			 else CTE.commit_index
-		end
+		end,
+		start_commit.index as start_commit_index,
+		end_commit.index as end_commit_index
 		from file 
 		inner join commit start_commit on file.start_commit_id=start_commit.id
+		left join commit end_commit on file.end_commit_id=end_commit.id
 		inner join CTE on file.p_file_id=CTE.file_id
 		where $1 like CTE.path || '/' || file.name || '%' and file.partition_id=$2
+		and (CTE.end_commit_index is null or start_commit.index<CTE.end_commit_index)
+		and (end_commit.index is null or end_commit.index>CTE.start_commit_index)
 	  )
 	SELECT CTE.*,commit.insert_time as commit_insert_time,commit.id as commit_id,commit.index as commit_index,file_info.size,public."user".name as user_name from CTE
 	inner join commit on CTE.commit_index=commit.index
