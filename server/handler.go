@@ -147,9 +147,6 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 					Files []map[string]interface{}
 				}{Files: files}
 				data.Path = filepath.Base(share["path"].(string))
-				if relative_path != "" {
-					data.Path += "/" + relative_path
-				}
 				model := s.newPageModel(ctx, data)
 				model.PageTitle = data.Path
 				ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
@@ -177,9 +174,9 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 					ServerFile  models.ServerFile
 					History     map[string]interface{}
 				}{Path: path, File: typed_file, ServerFile: *server_file, History: file}
-				data.DownloadUrl = "https://" + s.config.Website_domain + s.generateShareUrl("", token, "1")
+				data.DownloadUrl = "https://" + s.config.Website_domain + s.generateShareUrl(filepath.Join("/", relative_path), token, "1")
 				parameters := url.Values{}
-				parameters.Add("str", "https://"+s.config.Website_domain+s.generateShareUrl("", token, "0"))
+				parameters.Add("str", "https://"+s.config.Website_domain+s.generateShareUrl(filepath.Join("/", relative_path), token, "0"))
 				data.QRCodeUrl = Path_QRCode + "?" + parameters.Encode()
 				model := s.newPageModel(ctx, data)
 				model.PageTitle = data.Path

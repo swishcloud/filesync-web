@@ -162,6 +162,7 @@ func NewFileManager(m *SQLManager, user_id string) *fileManager {
 	return d
 }
 func (m *SQLManager) GetHistoryRevisions(path, partition_id string, max_revision int64) []map[string]interface{} {
+	//exclude:start_commit_index of file bigger than or equal to end_commit_index of directory,end_commit_index of file small than or equal to start_commit_index of directory
 	query := `
 	WITH RECURSIVE CTE AS (
 		SELECT file.*,'' as path,start_commit.index as commit_index,
