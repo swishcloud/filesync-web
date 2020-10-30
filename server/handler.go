@@ -104,6 +104,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		file_identifier := file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_identifier)
 		typed_file := s.GetStorage(ctx).GetFile(file_identifier)
+		full_name := filepath.Join(filepath.Base(share["path"].(string)), relative_path)
 		if file == nil {
 			panic("not found")
 		}
@@ -148,12 +149,12 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 				}{Files: files}
 				data.Path = filepath.Base(share["path"].(string))
 				model := s.newPageModel(ctx, data)
-				model.PageTitle = data.Path
+				model.PageTitle = full_name
 				ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
 					if file["type"] == "1" {
-						return s.generateShareUrl(filepath.Join("/", relative_path, "/", file["name"].(string)), token, "0"), nil
+						return s.generateShareUrl(filepath.Join("/", relative_path, file["name"].(string)), token, "0"), nil
 					} else {
-						return s.generateShareUrl(filepath.Join("/", relative_path, "/", file["name"].(string)), token, "0"), nil
+						return s.generateShareUrl(filepath.Join("/", relative_path, file["name"].(string)), token, "0"), nil
 
 					}
 				}
@@ -179,7 +180,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 				parameters.Add("str", "https://"+s.config.Website_domain+s.generateShareUrl(filepath.Join("/", relative_path), token, "0"))
 				data.QRCodeUrl = Path_QRCode + "?" + parameters.Encode()
 				model := s.newPageModel(ctx, data)
-				model.PageTitle = data.Path
+				model.PageTitle = full_name
 				ctx.RenderPage(model, "templates/layout.html", "templates/share_file_detail.html")
 			}
 
@@ -218,6 +219,9 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 func (s *FileSyncWebServer) generateShareUrl(path string, token string, dl string) string {
 	if dl != "1" && dl != "0" {
 		panic("parameter error:dl")
+	}
+	if path == "/" {
+		path = ""
 	}
 	return "/sh/" + token + path + "?dl=" + dl
 }
