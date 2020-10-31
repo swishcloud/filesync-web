@@ -12,8 +12,8 @@
        <span>file size:</span>  <span>{{.ServerFile.Size}} bytes</span>
    </div>
    <div>
-        {{$insert_time:=index .History "commit_insert_time"}}
-       <span>upload time:</span>  <span>{{formatTimeString $insert_time ""}}</span>
+        {{$insert_time:=index .History "insert_time"}}
+       <span>modified:</span>  <span>{{formatTimeString $insert_time ""}}</span>
    </div>
    <div>
        <span>user:</span>  <span>{{.File.UserName}}</span>

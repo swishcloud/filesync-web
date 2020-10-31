@@ -4,12 +4,12 @@
         <table class="table">
                 <tr>
                 <th>revision</th>    
-                <th>uploaded time</th>    
+                <th>modified</th>    
                 <th>size</th>    
                 <th>user</th>    
                 </tr>
                 {{range .Histories}}
-                {{$time:=index . "commit_insert_time"}}
+                {{$time:=index . "insert_time"}}
                 <tr >
                    <td><a style="color:blue" href="{{detailUrl .}}">{{index . "commit_id"}}</a></td>
                    <td>{{formatTimeString $time ""}}</td>

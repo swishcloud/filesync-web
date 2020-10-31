@@ -12,11 +12,11 @@
     </div>
     <table class="table">
         <tr>
-                <th><input type="checkbox"></th> <th>name</th>  <th>type</th> <th>size</th>  <th>time</th> 
+                <th><input type="checkbox"></th> <th>name</th>  <th>type</th> <th>size</th>  <th>modified</th> 
         </tr>
         {{range .Files}}
         {{$type:=index . "type"}}
-        {{$insert_time:=index . "commit_insert_time"}}
+        {{$insert_time:=index . "insert_time"}}
         {{$size:=index . "size"}}
         <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}' commit_id='{{index . "commit_id"}}'>
             <td><input type="checkbox"></td>

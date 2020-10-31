@@ -3,11 +3,11 @@
     <table class="table">
         <h2>{{.Path}}</h2>
         <tr>
-                <th>name</th>  <th>type</th> <th>size</th>  <th>time</th> 
+                <th>name</th>  <th>type</th> <th>size</th>  <th>modified</th> 
         </tr>
         {{range .Files}}
         {{$type:=index . "type"}} 
-        {{$insert_time:=index . "commit_insert_time"}}
+        {{$insert_time:=index . "insert_time"}}
         {{$size:=index . "size"}}
         <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}' commit_id='{{index . "commit_id"}}'>
             <td><a style="color:blue" href="{{detailUrl .}}">{{index . "name"}}</a></td>

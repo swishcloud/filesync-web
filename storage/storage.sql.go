@@ -163,7 +163,7 @@ func NewFileManager(m *SQLManager, user_id string) *fileManager {
 }
 func (m *SQLManager) GetHistoryRevisions(path, partition_id string, max_revision int64) []map[string]interface{} {
 	//exclude:start_commit_index of file bigger than or equal to end_commit_index of directory,end_commit_index of file small than or equal to start_commit_index of directory
-	query := `
+	query := `select * from(
 	WITH RECURSIVE CTE AS (
 		SELECT file.*,'' as path,start_commit.index as commit_index,
 		start_commit.index as start_commit_index,
@@ -187,12 +187,12 @@ func (m *SQLManager) GetHistoryRevisions(path, partition_id string, max_revision
 		and (CTE.end_commit_index is null or start_commit.index<CTE.end_commit_index)
 		and (end_commit.index is null or end_commit.index>CTE.start_commit_index)
 	  )
-	SELECT CTE.*,commit.insert_time as commit_insert_time,commit.id as commit_id,commit.index as commit_index,file_info.size,public."user".name as user_name from CTE
+	SELECT distinct on(CTE.id) CTE.*,commit.insert_time as commit_insert_time,commit.id as commit_id,file_info.size,public."user".name as user_name from CTE
 	inner join commit on CTE.commit_index=commit.index
 	left join file_info on CTE.file_info_id=file_info.id
 	inner join public."user" on CTE.user_id=public."user".id
 	where (CTE.path=$1 or $1='/') and commit.partition_id=$2 and CTE.commit_index<=$3
-	order by commit.index desc;
+	order by CTE.id,commit_index) T1 order by commit_index desc;
 	`
 	//query = "select *,name as path from file where $1!='1xfafa' and partition_id=$2"
 	rows := m.Tx.ScanRows(query, path, partition_id, max_revision)
