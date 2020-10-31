@@ -14,7 +14,6 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/swishcloud/filesync-web/storage/models"
-	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/tx"
 )
 
@@ -280,8 +279,8 @@ func (d *fileManager) copyFile(id string, destination_path string, destination_n
 		return errors.New("can not find the destination path.")
 	}
 
-	source_file := d.m.GetFile(id)
-	destination_file := d.m.GetFile(f["id"].(string))
+	source_file := d.m.GetFileById(id)
+	destination_file := d.m.GetFileById(f["id"].(string))
 
 	if destination_file.Type != 2 {
 		return errors.New("the destination path is not a folder.")
@@ -368,7 +367,7 @@ func (m *SQLManager) InsertFileInfo(md5, userId string, size int64) {
 	}
 	m.Tx.MustExec(add_server_file, uuid.New().String(), file_info_id, time.Now().UTC(), 0, false, servers[0].Id)
 }
-func (m *SQLManager) GetFile(id string) models.File {
+func (m *SQLManager) GetFileById(id string) models.File {
 	files := m.getFiles(" where file.id=$1", id)
 	if len(files) == 1 {
 		return files[0]
@@ -396,53 +395,22 @@ func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id strin
 	if max_commit_id == "" {
 		max_commit_id = m.GetPartitionLatestCommit(partition_id)["id"].(string)
 	}
-	max_commit := m.getCommitById(max_commit_id)
-	if max_commit == nil {
-		return nil, errors.New("parameter error.")
-	}
-	max_revision, err := strconv.ParseInt(max_commit["index"].(string), 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	histories := m.GetHistoryRevisions(path, partition_id, max_revision)
-	var directory map[string]interface{} = nil
-	if commit_id != "" {
-		for _, his := range histories {
-			if his["commit_id"].(string) == commit_id {
-				directory = his
-				break
-			}
-		}
-	} else if len(histories) > 0 {
-		directory = histories[0]
-	}
+	directory := m.GetFile(path, partition_id, commit_id, 2)
 	if directory == nil {
 		return nil, errors.New("the directory does not exist.")
 	}
-	file_id := directory["file_id"].(string)
-	directory_commit_index, err := strconv.ParseInt(directory["commit_index"].(string), 10, 64)
-	if err != nil {
-		return nil, err
-	}
-	query := `select T.*,commit.insert_time as commit_insert_time from (select file.*,case when start_commit.index>$3 then start_commit.id else $4 end as commit_id,file_info.size from file 
+	query := `select T.*,commit.insert_time as commit_insert_time from (select file.*,case when start_commit.index>directory_commit.index then start_commit.id else directory_commit.id end as commit_id,file_info.size from file 
 	inner join commit start_commit on file.start_commit_id=start_commit.id
 	left join commit end_commit on file.end_commit_id=end_commit.id
+	inner join commit directory_commit on directory_commit.id=$3
+	inner join commit max_commit on max_commit.id=$2
 	left join file_info on file.file_info_id=file_info.id
-	where file.p_file_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2)) T
+	where file.partition_id=$4 and file.p_file_id=$1 and start_commit.index<=max_commit.index and (end_commit.index is null or end_commit.index>max_commit.index)) T
 	inner join commit on T.commit_id=commit.id
 	order by name`
-	return m.Tx.ScanRows(query, file_id, max_revision, directory_commit_index, directory["commit_id"].(string)), nil
+	return m.Tx.ScanRows(query, directory["file_id"].(string), max_commit_id, directory["commit_id"].(string), partition_id), nil
 }
 
-// func (m *SQLManager) GetFiles(p_file_id, partition_id string, revision int64) []models.File {
-// 	revision = common.MaxInt64
-// 	if p_file_id == "" {
-// 		return m.getFiles(` where is_deleted=false and p_file_id is null and file.partition_id=$1 and start_commit.index<=$2 and (end_commit.index is null or end_commit.index>$2) order by file.name`, partition_id, revision)
-// 	} else {
-// 		return m.getFiles(` where is_deleted=false and p_file_id=$1 and file.partition_id=$2 and start_commit.index<=$3 and (end_commit.index is null or end_commit.index>$3) order by file.name`, p_file_id, partition_id, revision)
-// 	}
-// }
 func (m *SQLManager) GetFileBlocks(server_file_id string) []models.FileBlock {
 	query := `SELECT id, server_file_id, p_id, "end", start, path
     FROM public.file_block where server_file_id=$1 order by "end" desc;`
@@ -579,32 +547,34 @@ func (m *SQLManager) GetFilePath(partition_id string, id string, revision int64)
 )select path from CTE where p_file_id is null`
 	return m.Tx.ScanRow(query, partition_id, id, revision)["path"].(string)
 }
-func (m *SQLManager) GetDirectory(path string, partition_id string, revision int64) *models.Directory {
-	p := path
-	if path != "" {
-		p = "/" + path
+func (m *SQLManager) GetFile(path string, partition_id string, commit_id string, file_type int) map[string]interface{} {
+	if path == "/" {
+		path = ""
 	}
-	revision = common.MaxInt64
 	query := `WITH RECURSIVE CTE as(
-		select id,file_id,p_file_id,cast (name as text) as path,is_hidden from file a
-		where p_file_id is null and partition_id=$1 and type=2 and is_deleted=false and end_commit_id is null
+		select id,file_id,p_file_id,cast (name as text) as path,is_hidden,
+		start_commit_id as commit_id
+		from file
+		where p_file_id is null and file.type=$5 and is_deleted=false and end_commit_id is null and file.partition_id=$1
 		UNION ALL 
-		select file.id,file.file_id,file.p_file_id,path || '/' || file.name,file.is_hidden from file
+		select file.id,file.file_id,file.p_file_id,path || '/' || file.name,file.is_hidden,
+		case when a.index>CTE_commit.index then a.id
+			 else CTE_commit.id
+		end
+		from file
 		inner join commit a on file.start_commit_id=a.id
 		left join commit b on file.end_commit_id=b.id
-		inner join CTE on file.p_file_id=CTE.file_id where a.index<=$3 and (b.index is null or b.index>$3) )select id,file_id,p_file_id,is_hidden from CTE where path=$2		
+		inner join CTE on file.p_file_id=CTE.file_id
+		inner join commit CTE_commit on CTE.commit_id=CTE_commit.id
+		where a.index<=$3 and (b.index is null or b.index>$3) and $2 like path || '/' || file.name || '%' and file.partition_id=$1 and file.type=$5)
+		select * from CTE where path=$2	and commit_id=$4
 		`
-
-	var row = m.Tx.MustQueryRow(query, partition_id, p, revision)
-	directory := new(models.Directory)
-	if err := row.Scan(&directory.Id, &directory.File_id, &directory.P_file_id, &directory.Is_hidden); err != nil {
-		if err != sql.ErrNoRows {
-			panic(err)
-		} else {
-			return nil
-		}
+	commit := m.getCommitById(commit_id)
+	revision, err := strconv.ParseInt(commit["index"].(string), 10, 64)
+	if err != nil {
+		panic(revision)
 	}
-	return directory
+	return m.Tx.ScanRow(query, partition_id, path, revision, commit_id, file_type)
 }
 func (m *SQLManager) SetFileHidden(file_id string, is_hidden bool) {
 	m.Tx.MustExec("update file set is_hidden=$1 where id=$2", is_hidden, file_id)

@@ -78,12 +78,12 @@ func (s *FileSyncWebServer) fileInfoApiGetHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) directoryApiGetHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		path := ctx.Request.FormValue("path")
-		revision, err := strconv.ParseInt(ctx.Request.FormValue("r"), 10, 64)
-		if err != nil {
-			panic(err)
-		}
-		ctx.Success(s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id, revision))
+		// path := ctx.Request.FormValue("path")
+		// revision, err := strconv.ParseInt(ctx.Request.FormValue("r"), 10, 64)
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// ctx.Success(s.GetStorage(ctx).GetDirectory(path, s.MustGetLoginUser(ctx).Id, revision))
 	}
 }
 func (s *FileSyncWebServer) directoryApiPostHandler() goweb.HandlerFunc {

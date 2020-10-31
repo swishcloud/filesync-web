@@ -103,7 +103,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		file := s.GetStorage(ctx).GetHistoryRevisions(path, share_partition_id, share_max_revision)[0]
 		file_identifier := file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_identifier)
-		typed_file := s.GetStorage(ctx).GetFile(file_identifier)
+		typed_file := s.GetStorage(ctx).GetFileById(file_identifier)
 		full_name := filepath.Join(filepath.Base(share["path"].(string)), relative_path)
 		if file == nil {
 			panic("not found")
@@ -243,7 +243,7 @@ func (s *FileSyncWebServer) fileSharePostHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) fileRenameHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		id := ctx.Request.FormValue("id")
-		file := s.GetStorage(ctx).GetFile(id)
+		file := s.GetStorage(ctx).GetFileById(id)
 		model := struct {
 			File models.File
 		}{File: file}
@@ -443,6 +443,11 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		path := ctx.Request.FormValue("path")
 		commit_id := ctx.Request.FormValue("commit_id")
+		user := s.MustGetLoginUser(ctx)
+		if commit_id == "" {
+			commit := s.GetStorage(ctx).GetPartitionFirstCommit(user.Partition_id)
+			commit_id = commit["id"].(string)
+		}
 		max_commit_id := ctx.Request.FormValue("max")
 		files, err := s.GetStorage(ctx).GetFiles(path, commit_id, max_commit_id, s.MustGetLoginUser(ctx).Partition_id)
 		if err != nil {
@@ -519,7 +524,7 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		}
 		id := m_file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(id)
-		file := s.GetStorage(ctx).GetFile(id)
+		file := s.GetStorage(ctx).GetFileById(id)
 		if server_file == nil {
 			panic("file not found")
 		}
