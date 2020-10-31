@@ -570,6 +570,9 @@ func (m *SQLManager) GetFile(path string, partition_id string, commit_id string,
 		select * from CTE where path=$2	and commit_id=$4 and CTE.type=$5
 		`
 	commit := m.getCommitById(commit_id)
+	if commit == nil {
+		panic("can not find this file")
+	}
 	revision, err := strconv.ParseInt(commit["index"].(string), 10, 64)
 	if err != nil {
 		panic(revision)
