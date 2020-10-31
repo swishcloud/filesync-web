@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="container">
-            {{if .Latest_revision_url}}   
+            {{if eq .IsLatest false}}   
    <div class="text-center" style="background-color: yellow;width: 100%;">
         <a href="{{.Latest_revision_url}}" class="font-weight-bold" >switch to latest revision</a>
     </div>

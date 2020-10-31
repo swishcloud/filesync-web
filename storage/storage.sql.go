@@ -552,12 +552,12 @@ func (m *SQLManager) GetFile(path string, partition_id string, commit_id string,
 		path = ""
 	}
 	query := `WITH RECURSIVE CTE as(
-		select id,file_id,p_file_id,cast (name as text) as path,is_hidden,
+		select id,file_id,p_file_id,cast (name as text) as path,is_hidden,type,
 		start_commit_id as commit_id
 		from file
-		where p_file_id is null and file.type=$5 and is_deleted=false and end_commit_id is null and file.partition_id=$1
+		where p_file_id is null and is_deleted=false and end_commit_id is null and file.partition_id=$1
 		UNION ALL 
-		select file.id,file.file_id,file.p_file_id,path || '/' || file.name,file.is_hidden,
+		select file.id,file.file_id,file.p_file_id,path || '/' || file.name,file.is_hidden,file.type,
 		case when a.index>CTE_commit.index then a.id
 			 else CTE_commit.id
 		end
@@ -566,8 +566,8 @@ func (m *SQLManager) GetFile(path string, partition_id string, commit_id string,
 		left join commit b on file.end_commit_id=b.id
 		inner join CTE on file.p_file_id=CTE.file_id
 		inner join commit CTE_commit on CTE.commit_id=CTE_commit.id
-		where a.index<=$3 and (b.index is null or b.index>$3) and $2 like path || '/' || file.name || '%' and file.partition_id=$1 and file.type=$5)
-		select * from CTE where path=$2	and commit_id=$4
+		where a.index<=$3 and (b.index is null or b.index>$3) and $2 like path || '/' || file.name || '%' and file.partition_id=$1)
+		select * from CTE where path=$2	and commit_id=$4 and CTE.type=$5
 		`
 	commit := m.getCommitById(commit_id)
 	revision, err := strconv.ParseInt(commit["index"].(string), 10, 64)

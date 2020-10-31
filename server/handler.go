@@ -498,30 +498,23 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		}
 		path := ctx.Request.FormValue("path")
 		commit_id := ctx.Request.FormValue("commit_id")
-		histories := s.GetStorage(ctx).GetHistoryRevisions(path, login_user.Partition_id, common.MaxInt64)
-		var m_file map[string]interface{} = nil
-		var m_file_latest map[string]interface{} = nil
-		var latest_revision_url = ""
-		if len(histories) > 0 {
-			m_file = histories[0]
-			m_file_latest = histories[0]
-		} else if m_file == nil {
+		m_file := s.GetStorage(ctx).GetFile(path, login_user.Partition_id, commit_id, 1)
+		if m_file == nil {
 			panic("the file does not exist")
 		}
-		if commit_id != "" {
-			for _, his := range histories {
-				if his["commit_id"].(string) == commit_id {
-					m_file = his
-					break
-				}
+		histories := s.GetStorage(ctx).GetHistoryRevisions(path, login_user.Partition_id, common.MaxInt64)
+		var history map[string]interface{}
+		for _, v := range histories {
+			if v["id"] == m_file["id"] {
+				history = v
 			}
 		}
-		if m_file_latest["commit_id"].(string) != m_file["commit_id"].(string) {
-			parameters := url.Values{}
-			parameters.Add("path", filepath.Join("/", path))
-			parameters.Add("commit_id", m_file_latest["commit_id"].(string))
-			latest_revision_url = Path_File + "?" + parameters.Encode()
-		}
+		latest_history := histories[0]
+		is_lastest := latest_history["id"] == history["id"]
+		parameters := url.Values{}
+		parameters.Add("path", filepath.Join("/", path))
+		parameters.Add("commit_id", latest_history["commit_id"].(string))
+		latest_revision_url := Path_File + "?" + parameters.Encode()
 		id := m_file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(id)
 		file := s.GetStorage(ctx).GetFileById(id)
@@ -547,7 +540,8 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 			CanDelete           bool
 			HistoryUrl          string
 			Latest_revision_url string
-		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url, History: m_file}
+			IsLatest            bool
+		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url, History: history, IsLatest: is_lastest}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
 }
