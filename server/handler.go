@@ -701,56 +701,78 @@ type FileChange struct {
 	Path        string
 	ChangeType  int //1 add,2 delete,3 move,4 rename,5 copy
 	Source_Path string
+	Md5         *string
 }
 
+func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit_id string, partition_id string) []FileChange {
+	commit := storage.GetCommitById(commit_id)
+	commit_index, err := strconv.ParseInt(commit["index"].(string), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	changes := storage.GetCommitChanges(partition_id, commit_id)
+	file_changes := []FileChange{}
+	for _, v := range changes {
+		fmt.Println(v)
+		change := FileChange{}
+		id := v["id"].(string)
+		change.Id = id
+		if v["md5"] != nil {
+			md5 := v["md5"].(string)
+			change.Md5 = &md5
+		} else {
+			change.Md5 = nil
+		}
+		var path string
+		if commit_id == v["start_commit_id"].(string) {
+			path, err = storage.GetFilePath(partition_id, id, commit_index)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			change.ChangeType = 1
+		} else if commit_id == v["end_commit_id"].(string) {
+			path, err = storage.GetFilePath(partition_id, id, commit_index-1)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			change.ChangeType = 2
+		}
+		change.Path = path
+		if change.ChangeType == 1 && v["source"] != nil {
+			for i, v2 := range file_changes {
+				if v2.Id == v["source"].(string) {
+					file_changes = append(file_changes[:i], file_changes[i+1:]...)
+					change.Source_Path = v2.Path
+					if filepath.Dir(change.Path) == filepath.Dir(v2.Path) {
+						change.ChangeType = 4
+					} else {
+						change.ChangeType = 3
+					}
+					break
+				}
+			}
+			if change.Source_Path == "" {
+				change.Source_Path, err = storage.GetFilePath(partition_id, v["source"].(string), commit_index-1)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				change.ChangeType = 5
+			}
+		}
+		file_changes = append(file_changes, change)
+	}
+	return file_changes
+}
 func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		commit_id := ctx.Request.FormValue("id")
-		user := s.MustGetLoginUser(ctx)
-		commit := s.GetStorage(ctx).GetCommitById(commit_id)
-		commit_index, err := strconv.ParseInt(commit["index"].(string), 10, 64)
-		if err != nil {
-			panic(err)
-		}
-		changes := s.GetStorage(ctx).GetCommitChanges(user.Partition_id, commit_id)
-		file_changes := []FileChange{}
-		for _, v := range changes {
-			change := FileChange{}
-			id := v["id"].(string)
-			change.Id = id
-			var path string
-			if commit_id == v["start_commit_id"].(string) {
-				path = s.GetStorage(ctx).GetFilePath(user.Partition_id, id, commit_index)
-				change.ChangeType = 1
-			} else if commit_id == v["end_commit_id"].(string) {
-				path = s.GetStorage(ctx).GetFilePath(user.Partition_id, id, commit_index-1)
-				change.ChangeType = 2
-			}
-			change.Path = path
-			if change.ChangeType == 1 && v["source"] != nil {
-				for i, v2 := range file_changes {
-					if v2.Id == v["source"].(string) {
-						file_changes = append(file_changes[:i], file_changes[i+1:]...)
-						change.Source_Path = v2.Path
-						if filepath.Dir(change.Path) == filepath.Dir(v2.Path) {
-							change.ChangeType = 4
-						} else {
-							change.ChangeType = 3
-						}
-						break
-					}
-				}
-				if change.Source_Path == "" {
-					change.Source_Path = s.GetStorage(ctx).GetFilePath(user.Partition_id, v["source"].(string), commit_index-1)
-					change.ChangeType = 5
-				}
-			}
-			file_changes = append(file_changes, change)
-		}
+		file_changes := s.GetCommitFileChanges(s.GetStorage(ctx), commit_id, s.MustGetLoginUser(ctx).Partition_id)
 		model := struct {
-			Str     string
 			Changes []FileChange
-		}{Str: fmt.Sprintln(changes), Changes: file_changes}
+		}{Changes: file_changes}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_commit_detail.html")
 	}
 }

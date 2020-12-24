@@ -65,6 +65,11 @@ func (m *SQLManager) GetRecentCommits(partition_id string) []map[string]interfac
 	return m.Tx.ScanRows(query, partition_id)
 }
 
+func (m *SQLManager) GetNextCommit(partition_id string, commit_id string) map[string]interface{} {
+	query := `select * from commit where partition_id=$1 and index>(select index from commit where id=$2 and partition_id=$1) order by index asc limit 1`
+	return m.Tx.ScanRow(query, partition_id, commit_id)
+}
+
 func (m *SQLManager) GetCommitChanges(partition_id string, commit_id string) []map[string]interface{} {
 	query := `select file.*,file_info.md5,case when end_commit_id=$2 then true else false end as del from file left join file_info on file.file_info_id=file_info.id where partition_id=$1 and (start_commit_id=$2 or end_commit_id=$2) order by del desc`
 	return m.Tx.ScanRows(query, partition_id, commit_id)
@@ -140,6 +145,11 @@ func (m *SQLManager) SuperDoFileActions(actions []Action, user_id, partition_id 
 		if err != nil {
 			break
 		}
+	}
+	changes := m.GetCommitChanges(d.partition_id, d.commit_id)
+	if len(changes) == 0 {
+		log.Println("Actions not made changes,rollbacking...")
+		m.Rollback()
 	}
 	if err != nil {
 		m.Rollback()
@@ -399,7 +409,7 @@ func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id strin
 	if directory == nil {
 		return nil, errors.New("the directory does not exist.")
 	}
-	query := `select T.*,commit.insert_time as commit_insert_time from (select file.*,case when start_commit.index>directory_commit.index then start_commit.id else directory_commit.id end as commit_id,file_info.size from file 
+	query := `select T.*,commit.insert_time as commit_insert_time from (select file.*,case when start_commit.index>directory_commit.index then start_commit.id else directory_commit.id end as commit_id,file_info.md5,file_info.size from file 
 	inner join commit start_commit on file.start_commit_id=start_commit.id
 	left join commit end_commit on file.end_commit_id=end_commit.id
 	inner join commit directory_commit on directory_commit.id=$3
@@ -535,17 +545,23 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) (user *models.User
 	}
 	return user, err
 }
-func (m *SQLManager) GetFilePath(partition_id string, id string, revision int64) string {
+func (m *SQLManager) GetFilePath(partition_id string, id string, revision int64) (path string, err error) {
 	query := `WITH RECURSIVE CTE as(
-		select start_commit_id,p_file_id,cast(name as text) as path from file a
+		select p_file_id,cast(name as text) as path from file a
 		where id=$2
 		UNION ALL 
-		select file.start_commit_id,file.p_file_id,file.name || '/' || CTE.path from file
+		select file.p_file_id,file.name || '/' || CTE.path from file
 		inner join commit start_commit on file.start_commit_id=start_commit.id
 		left join commit end_commit on file.end_commit_id=end_commit.id
 		inner join CTE on file.file_id=CTE.p_file_id where file.partition_id=$1 and start_commit.index<=$3 and (end_commit.index is null or end_commit.index>$3)
 )select path from CTE where p_file_id is null`
-	return m.Tx.ScanRow(query, partition_id, id, revision)["path"].(string)
+	row := m.Tx.ScanRow(query, partition_id, id, revision)
+	if row == nil {
+		log.Printf("unexpected exception.")
+		return "", errors.New("unexpected exception.")
+	} else {
+		return row["path"].(string), nil
+	}
 }
 func (m *SQLManager) GetFile(path string, partition_id string, commit_id string, file_type int) map[string]interface{} {
 	if path == "/" {

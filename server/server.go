@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/swishcloud/goweb/auth"
+
 	"github.com/swishcloud/filesync/message"
 
 	"golang.org/x/oauth2"
@@ -58,6 +60,7 @@ type FileSyncWebServer struct {
 	rac             *common.RestApiClient
 }
 type TcpServer struct {
+	fs         *FileSyncWebServer
 	listenPort int
 	clients    []*client
 	connect    chan *session.Session
@@ -65,8 +68,10 @@ type TcpServer struct {
 	config     *Config
 }
 type client struct {
-	session *session.Session
-	class   int
+	session      *session.Session
+	class        int
+	partition_id string
+	user         *models.User
 }
 
 func readConfig(configPath string) *Config {
@@ -90,8 +95,9 @@ func readConfig(configPath string) *Config {
 	return config
 
 }
-func NewTcpServer(configPath string, port int) *TcpServer {
+func NewTcpServer(configPath string, port int, fs *FileSyncWebServer) *TcpServer {
 	server := new(TcpServer)
+	server.fs = fs
 	server.config = readConfig(configPath)
 	server.clients = []*client{}
 	server.listenPort = port
@@ -137,17 +143,17 @@ func (s *TcpServer) Serve() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		s.connect <- session.NewSession(conn)
+		session := session.NewSession(conn)
+		s.connect <- session
 	}
 }
-
 func (s *TcpServer) serveSessions() {
 	for {
 		select {
 		case connect := <-s.connect:
 			client := &client{session: connect, class: 1}
 			s.clients = append(s.clients, client)
-			s.serveClient(client)
+			go s.serveClient(client)
 		case disconect := <-s.disconnect:
 			disconect.Close()
 			for index, item := range s.clients {
@@ -158,9 +164,15 @@ func (s *TcpServer) serveSessions() {
 			}
 		case _ = <-time.After(time.Second * 1):
 			for _, client := range s.clients {
+				if client.user == nil {
+					continue
+				}
 				msg := message.NewMessage(message.MT_SYNC)
 				storage := storage.NewSQLManager(s.config.DB_CONN_INFO)
 				msg.Header["max"] = -1
+				msg.Header["max_commit_id"] = storage.GetPartitionLatestCommit(client.partition_id)["id"]
+				msg.Header["first_commit_id"] = storage.GetPartitionFirstCommit(client.partition_id)["id"]
+				msg.Header["partition_id"] = client.partition_id
 				storage.Commit()
 				if err := client.session.Send(msg, nil); err != nil {
 					go func() {
@@ -174,7 +186,41 @@ func (s *TcpServer) serveSessions() {
 	}
 }
 func (s *TcpServer) serveClient(client *client) {
+	for {
+		msg, err := client.session.ReadMessage()
+		if err != nil {
+			log.Println(err)
+			s.disconnect <- client.session
+			return
+		}
+		token := msg.Header["token"]
+		if token == nil {
+			log.Println("the token is missing")
+			s.disconnect <- client.session
+			return
 
+		}
+		ok, sub, err := auth.CheckToken(s.fs.rac, &oauth2.Token{AccessToken: token.(string)}, s.fs.config.OAuth.IntrospectTokenURL, s.fs.skip_tls_verify)
+		if err != nil {
+			log.Println(err)
+			s.disconnect <- client.session
+			return
+		}
+		if !ok {
+			log.Println("the token is invalid:", token)
+			s.disconnect <- client.session
+			return
+		}
+		store := storage.NewSQLManager(s.fs.config.DB_CONN_INFO)
+		user := store.GetUserByOpId(sub)
+		if user == nil {
+			log.Println("not found the user")
+			s.disconnect <- client.session
+			return
+		}
+		client.user = user
+		client.partition_id = user.Partition_id
+	}
 }
 func (s *FileSyncWebServer) Serve() {
 	s.bindHandlers(s.engine.RouterGroup.Group())

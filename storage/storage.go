@@ -35,6 +35,7 @@ type Storage interface {
 	GetCommits(partition_id string, from_commit string) []map[string]interface{}
 	GetCommitById(commit_id string) map[string]interface{}
 	GetRecentCommits(partition_id string) []map[string]interface{}
+	GetNextCommit(partition_id string, commit_id string) map[string]interface{}
 	GetCommitChanges(partition_id string, commit_id string) []map[string]interface{}
-	GetFilePath(partition_id string, id string, revision int64) string
+	GetFilePath(partition_id string, id string, revision int64) (path string, err error)
 }

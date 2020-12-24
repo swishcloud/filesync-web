@@ -94,6 +94,25 @@ func (action DeleteAction) Do(m *fileManager) error {
 	return nil
 }
 
+//
+
+type DeleteByPathAction struct {
+	Path      string
+	Commit_id string
+	File_type int
+}
+
+func (action DeleteByPathAction) Do(m *fileManager) error {
+	file := m.m.GetFile(action.Path, m.partition_id, action.Commit_id, action.File_type)
+	if file == nil {
+		return errors.New("this source file does not exist.")
+	}
+	m.deleteFile(file["id"].(string))
+	return nil
+}
+
+//
+
 type RenameAction struct {
 	Id      string
 	NewName string
@@ -104,7 +123,10 @@ func (action RenameAction) Do(m *fileManager) error {
 	if err != nil {
 		return err
 	}
-	path := m.m.GetFilePath(m.partition_id, action.Id, index-1)
+	path, err := m.m.GetFilePath(m.partition_id, action.Id, index-1)
+	if err != nil {
+		return err
+	}
 	return m.copyFile(action.Id, filepath.Dir(path), &action.NewName, true)
 }
 

@@ -3,7 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
+
+	"github.com/google/uuid"
 
 	"github.com/swishcloud/filesync-web/storage"
 	"github.com/swishcloud/goweb"
@@ -22,9 +25,11 @@ const (
 	API_PATH_Directory      = "/api/directory"
 	API_PATH_Log            = "/api/log"
 	API_PATH_Commit_Changes = "/api/commit/changes"
+	API_PATH_Files          = "/api/files"
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
+	group.Use(func(ctx *goweb.Context) { ctx.Writer.EnsureInitialzed(false) })
 	group.Use(s.apiMiddleware())
 	group.GET(API_PATH_File_INFO, s.fileInfoApiGetHandler())
 	group.POST(API_PATH_File_Upload, s.fileUploadApiPostHandler())
@@ -41,6 +46,7 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.GET(API_PATH_Directory, s.directoryApiGetHandler())
 	group.GET(API_PATH_Log, s.logApiGetHandler())
 	group.GET(API_PATH_Commit_Changes, s.commitChangesGetHandler())
+	group.GET(API_PATH_Files, s.filesGetHandler())
 }
 
 func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
@@ -48,7 +54,10 @@ func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
 		ctx.Writer.EnsureInitialzed(true)
 		if tokenstr, err := auth.GetBearerToken(ctx); err == nil {
 			token := &oauth2.Token{AccessToken: tokenstr}
-			if _, sub, err := auth.CheckToken(s.rac, token, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
+			if ok, sub, err := auth.CheckToken(s.rac, token, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
+				if !ok {
+					panic("the session has expired.")
+				}
 				user := s.GetStorage(ctx).GetUserByOpId(sub)
 				if user == nil {
 					s.addOrUpdateUser(ctx, token)
@@ -58,6 +67,8 @@ func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
 			} else {
 				panic(err)
 			}
+		} else {
+			panic(err)
 		}
 	}
 }
@@ -114,44 +125,43 @@ func (s *FileSyncWebServer) fileUploadApiPostHandler() goweb.HandlerFunc {
 
 func (s *FileSyncWebServer) fileApiGetHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		/* file_id := ctx.Request.URL.Query().Get("file_id")
-		var data *models.ServerFile
-		if file_id != "" {
-			data = s.GetStorage(ctx).GetServerFileByFileId(file_id)
-		} else {
-			name := ctx.Request.URL.Query().Get("name")
-			is_hidden, err := strconv.ParseBool(ctx.Request.FormValue("is_hidden"))
-			if err != nil {
-				panic(err)
-			}
-			directory_path := ctx.Request.URL.Query().Get("directory_path")
-			revision, err := strconv.ParseInt(ctx.Request.FormValue("r"), 10, 64)
-			if err != nil {
-				revision = -1
-			}
-			directory := s.GetStorage(ctx).GetDirectory(directory_path, s.MustGetLoginUser(ctx).Id, revision)
-			if directory != nil {
-				data = s.GetStorage(ctx).GetServerFile(name, directory.Id, s.MustGetLoginUser(ctx).Id)
-				if data != nil && data.Is_hidden != is_hidden {
-					s.GetStorage(ctx).SetFileHidden(data.File_id, is_hidden)
-				}
-			}
-		}
-		ctx.Success(data) */
+		path := ctx.Request.FormValue("path")
+		commit_id := ctx.Request.FormValue("commit_id")
+		user := s.MustGetLoginUser(ctx)
+		file := s.GetStorage(ctx).GetFile(path, user.Partition_id, commit_id, 1)
+		server_file := s.GetStorage(ctx).GetServerFileByFileId(file["id"].(string))
+		ctx.Success(server_file)
 	}
 }
 
 func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		directory_actions_json := ctx.Request.PostForm.Get("directory_actions")
-		file_actions_json := ctx.Request.PostForm.Get("file_actions")
-		directory_actions := []storage.CreateDirectoryAction{}
-		file_actions := []storage.CreateFileAction{}
-		err := json.Unmarshal([]byte(directory_actions_json), &directory_actions)
+		err := ctx.Request.ParseMultipartForm(ctx.Request.ContentLength)
 		if err != nil {
 			panic(err)
 		}
+		directory_actions_json := ctx.Request.PostForm.Get("directory_actions")
+		file_actions_json := ctx.Request.PostForm.Get("file_actions")
+		delete_actions_json := ctx.Request.PostForm.Get("delete_actions")
+		delete_by_path_actions_json := ctx.Request.PostForm.Get("delete_by_path_actions")
+		directory_actions := []storage.CreateDirectoryAction{}
+		file_actions := []storage.CreateFileAction{}
+		delete_actions := []storage.DeleteAction{}
+		delete_by_path_actions := []storage.DeleteByPathAction{}
+		err = json.Unmarshal([]byte(directory_actions_json), &directory_actions)
+		if err != nil {
+			fmt.Println("failed to parse the json:" + directory_actions_json)
+			panic(err)
+		}
 		json.Unmarshal([]byte(file_actions_json), &file_actions)
+		if err != nil {
+			panic(err)
+		}
+		json.Unmarshal([]byte(delete_actions_json), &delete_actions)
+		if err != nil {
+			panic(err)
+		}
+		json.Unmarshal([]byte(delete_by_path_actions_json), &delete_by_path_actions)
 		if err != nil {
 			panic(err)
 		}
@@ -162,8 +172,16 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 		for _, a := range file_actions {
 			actions = append(actions, a)
 		}
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
-			panic(err)
+		for _, a := range delete_actions {
+			actions = append(actions, a)
+		}
+		for _, a := range delete_by_path_actions {
+			actions = append(actions, a)
+		}
+		if len(actions) > 0 {
+			if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+				panic(err)
+			}
 		}
 		ctx.Success(nil)
 	}
@@ -250,12 +268,38 @@ func (s *FileSyncWebServer) logApiGetHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) commitChangesGetHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		commit_id := ctx.Request.FormValue("commit_id")
 		partition_id := s.MustGetLoginUser(ctx).Partition_id
-		commits := s.GetStorage(ctx).GetCommits(partition_id, s.GetStorage(ctx).GetPartitionFirstCommit(partition_id)["id"].(string))
-		for _, v := range commits {
-			changes := s.GetStorage(ctx).GetCommitChanges(partition_id, v["id"].(string))
-			v["changes"] = changes
+		next_commit := s.GetStorage(ctx).GetNextCommit(partition_id, commit_id)
+		if next_commit == nil {
+			ctx.Success(nil)
+			return
 		}
-		ctx.Success(commits)
+		file_changes := s.GetCommitFileChanges(s.GetStorage(ctx), next_commit["id"].(string), partition_id)
+		result := struct {
+			Commit_id string
+			Changes   []FileChange
+		}{Commit_id: next_commit["id"].(string), Changes: file_changes}
+		ctx.Success(result)
+	}
+}
+func (s *FileSyncWebServer) filesGetHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		path := ctx.Request.FormValue("path")
+		commit_id := ctx.Request.FormValue("commit_id")
+		max_commit_id := ctx.Request.FormValue("max")
+		if _, err := uuid.Parse(max_commit_id); err != nil {
+			panic(err)
+		}
+		user := s.MustGetLoginUser(ctx)
+		if commit_id == "" {
+			commit := s.GetStorage(ctx).GetPartitionFirstCommit(user.Partition_id)
+			commit_id = commit["id"].(string)
+		}
+		files, err := s.GetStorage(ctx).GetFiles(path, commit_id, max_commit_id, user.Partition_id)
+		if err != nil {
+			panic(err)
+		}
+		ctx.Success(files)
 	}
 }
