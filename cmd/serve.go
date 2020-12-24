@@ -19,7 +19,7 @@ var serveCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		webServer := server.NewFileSyncWebServer(path, skip_tls_verify)
-		tcpServer := server.NewTcpServer(path, 2003, webServer)
+		tcpServer := server.NewTcpServer(path, webServer)
 		go tcpServer.Serve()
 		webServer.Serve()
 	},

@@ -29,6 +29,7 @@ import (
 
 type Config struct {
 	Listen_ip      string      `yaml:"listen_ip"`
+	Tcp_port       int         `yaml:"tcp_port"`
 	Website_domain string      `yaml:"website_domain"`
 	FILE_LOCATION  string      `yaml:"file_location"`
 	DB_CONN_INFO   string      `yaml:"db_conn_info"`
@@ -95,12 +96,12 @@ func readConfig(configPath string) *Config {
 	return config
 
 }
-func NewTcpServer(configPath string, port int, fs *FileSyncWebServer) *TcpServer {
+func NewTcpServer(configPath string, fs *FileSyncWebServer) *TcpServer {
 	server := new(TcpServer)
 	server.fs = fs
 	server.config = readConfig(configPath)
 	server.clients = []*client{}
-	server.listenPort = port
+	server.listenPort = server.config.Tcp_port
 	server.connect = make(chan *session.Session)
 	server.disconnect = make(chan *session.Session)
 	return server
@@ -223,6 +224,7 @@ func (s *TcpServer) serveClient(client *client) {
 	}
 }
 func (s *FileSyncWebServer) Serve() {
+
 	s.bindHandlers(s.engine.RouterGroup.Group())
 	apiGroup := s.engine.RouterGroup.Group()
 	s.bindApiHandlers(apiGroup)
