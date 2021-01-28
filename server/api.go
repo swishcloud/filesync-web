@@ -26,6 +26,7 @@ const (
 	API_PATH_Log            = "/api/log"
 	API_PATH_Commit_Changes = "/api/commit/changes"
 	API_PATH_Files          = "/api/files"
+	API_Reset_Server_File   = "/api/reset-server-file"
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
@@ -47,6 +48,7 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.GET(API_PATH_Log, s.logApiGetHandler())
 	group.GET(API_PATH_Commit_Changes, s.commitChangesGetHandler())
 	group.GET(API_PATH_Files, s.filesGetHandler())
+	group.POST(API_Reset_Server_File, s.resetServerFile())
 }
 
 func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
@@ -301,5 +303,13 @@ func (s *FileSyncWebServer) filesGetHandler() goweb.HandlerFunc {
 			panic(err)
 		}
 		ctx.Success(files)
+	}
+}
+func (s *FileSyncWebServer) resetServerFile() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		user := s.MustGetLoginUser(ctx)
+		s.GetStorage(ctx).ResetServerFile(user.Partition_id, id)
+		ctx.Success(nil)
 	}
 }

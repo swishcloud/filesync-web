@@ -38,4 +38,5 @@ type Storage interface {
 	GetNextCommit(partition_id string, commit_id string) map[string]interface{}
 	GetCommitChanges(partition_id string, commit_id string) []map[string]interface{}
 	GetFilePath(partition_id string, id string, revision int64) (path string, err error)
+	ResetServerFile(partition_id string, server_file_id string)
 }
