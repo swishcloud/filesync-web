@@ -45,13 +45,16 @@ func (m *SQLManager) Rollback() error {
 }
 func (m *SQLManager) ResetServerFile(partition_id string, server_file_id string) {
 	//do not reset whole files
-	file := m.GetServerFileByServerFileId(server_file_id)
-	if file.Is_completed {
+	row := m.Tx.ScanRow(`select is_completed from server_file where id=$1`, server_file_id)
+	is_completed, err := strconv.ParseBool(row["is_completed"].(string))
+	if err != nil {
+		panic(err)
+	}
+	if is_completed {
 		panic("can not reset a server file which has wholly uploaded")
 	}
-	script := `update server_file set uploaded_size=0,is_completed=false where partition_id=$1 and id=$2 ;
-	delete from file_block where partition_id=$1 and server_file_id=$2 ;`
-	m.Tx.MustExec(script)
+	m.Tx.MustExec(`update server_file set uploaded_size=0,is_completed=false where id=$1`, server_file_id)
+	m.Tx.MustExec(`delete from file_block where server_file_id=$1`, server_file_id)
 }
 func (m *SQLManager) GetPartitionLatestCommit(partition_id string) map[string]interface{} {
 	query := `select * from commit where partition_id=$1 order by index desc limit 1`
