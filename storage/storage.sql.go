@@ -246,7 +246,9 @@ func (d *fileManager) insertFile(name string, file_id string, p_file_id *string,
 			panic("A directory with the same name exists in the directory")
 		}
 		if t == 1 && file["file_info_id"].(string) != *file_info_id || file["is_hidden"].(string) != strconv.FormatBool(is_hidden) {
-			d.deleteFile(file["id"].(string))
+			id := file["id"].(string)
+			d.deleteFile(id)
+			source = &id
 		} else {
 			//the file already exists,just return.
 			return
