@@ -275,13 +275,9 @@ func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 
 	m := ctx.Data["storage"]
 	if m != nil {
-		if ctx.Ok {
-			err := m.(storage.Storage).Commit()
-			if err != nil {
-				log.Println(err)
-			}
-		} else {
-			m.(storage.Storage).Rollback()
+		err := m.(storage.Storage).Commit()
+		if err != nil {
+			log.Println(err)
 		}
 	}
 

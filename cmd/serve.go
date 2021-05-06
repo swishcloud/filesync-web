@@ -29,5 +29,4 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().StringP("config", "c", "config.yaml", "server config file")
 	serveCmd.Flags().Bool("skip-tls-verify", false, "skip tls verify")
-	serveCmd.MarkFlagRequired("config")
 }

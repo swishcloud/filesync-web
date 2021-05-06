@@ -1,19 +1,19 @@
-db_conn_info: "postgres://filesync:secret@192.168.1.1:6010/filesync?sslmode=disable"
+db_conn_info: "postgres://filesync:secret@192.168.29.3:6010/filesync?sslmode=disable"
 listen_ip: 0.0.0.0
-tcp_port: 8081
-website_domain: "192.168.1.1:2002"
+tcp_port: 2003
+website_domain: "192.168.29.3:2002"
 oauth:
   ClientId: "FILESYNC_WEB"
-  TokenUrl: "https://192.168.1.1:8010/oauth2/token"
-  AuthUrl: "https://192.168.1.1:8010/oauth2/auth"
+  TokenUrl: "https://192.168.29.3:8010/oauth2/token"
+  AuthUrl: "https://192.168.29.3:8010/oauth2/auth"
   Secret: "FILESYNC_WEB_SECRET"
-  RedirectURL: "https://192.168.1.1:2002/login-callback"
-  NativeAppRedirectURL: "https://192.168.1.1:11109/.approvalnativeapp"
-  UserInfoURL: "https://192.168.1.1:11109/user_info"
-  IntrospectTokenURL: "https://192.168.1.1:11109/api/introspect-token"
-  LogoutUrl: "https://192.168.1.1:8010/oauth2/sessions/logout"
-  LogoutRedirectUrl: "https://192.168.1.1:2002"
-  JWKJsonUrl: "https://192.168.1.1:8010/.well-known/jwks.json"
+  RedirectURL: "https://192.168.29.3:2002/login-callback"
+  NativeAppRedirectURL: "https://192.168.29.3:11109/.approvalnativeapp"
+  UserInfoURL: "https://192.168.29.3:11109/user_info"
+  IntrospectTokenURL: "https://192.168.29.3:11109/api/introspect-token"
+  LogoutUrl: "https://192.168.29.3:8010/oauth2/sessions/logout"
+  LogoutRedirectUrl: "https://192.168.29.3:2002"
+  JWKJsonUrl: "https://192.168.29.3:8010/.well-known/jwks.json"
 file_location: .cache/files/
 tls_cert_file: .cache/localhost.crt
 tls_key_file: .cache/localhost.key
