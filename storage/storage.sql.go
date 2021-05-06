@@ -248,7 +248,9 @@ func (d *fileManager) insertFile(name string, file_id string, p_file_id *string,
 		if t == 1 && file["file_info_id"].(string) != *file_info_id || file["is_hidden"].(string) != strconv.FormatBool(is_hidden) {
 			id := file["id"].(string)
 			d.deleteFile(id)
-			source = &id
+			if source == nil {
+				source = &id
+			}
 		} else {
 			//the file already exists,just return.
 			return
