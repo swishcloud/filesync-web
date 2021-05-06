@@ -237,18 +237,22 @@ func (d *fileManager) insertFile(name string, file_id string, p_file_id *string,
 		file_info_id = nil
 	}
 
-	if t == 1 {
-		query := `select * from file where p_file_id=$1 and name=$2 and end_commit_id is null`
-		file := d.m.Tx.ScanRow(query, p_file_id, name)
-		if file != nil {
-			if file["file_info_id"].(string) != *file_info_id || file["is_hidden"].(string) != strconv.FormatBool(is_hidden) {
-				d.deleteFile(file["id"].(string))
-			} else {
-				//the file already exists,just return.
-				return
-			}
+	query := `select * from file where p_file_id=$1 and name=$2 and end_commit_id is null`
+	file := d.m.Tx.ScanRow(query, p_file_id, name)
+	if file != nil {
+		if file["type"] != "1" && t == 1 {
+			panic("A file with the same name exists in the directory")
+		} else if file["type"] != "2" && t == 2 {
+			panic("A directory with the same name exists in the directory")
+		}
+		if t == 1 && file["file_info_id"].(string) != *file_info_id || file["is_hidden"].(string) != strconv.FormatBool(is_hidden) {
+			d.deleteFile(file["id"].(string))
+		} else {
+			//the file already exists,just return.
+			return
 		}
 	}
+
 	insert_file := `INSERT INTO public.file(
 		id, insert_time, name, description, user_id, file_info_id,is_deleted,is_hidden,type,start_commit_id,file_id,p_file_id,partition_id,source)
 		VALUES ($1, $2, $3, $4, $5, $6,$7,$8,$9,$10,$11,$12,$13,$14);`

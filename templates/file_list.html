@@ -1,24 +1,30 @@
 {{define "content"}}
 <div class="container">
-        <input id="file" style="display:none" type="file" onchange="uploadFile(this)" >
+    <input id="file" style="display:none" type="file" onchange="uploadFile(this)">
     <div class="mb-3">
-        <a  class="btn btn-primary"href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
+        <a class="btn btn-primary" href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
         <!-- <a  class="btn btn-primary" href="javascript::#" onclick='$("#file").click();'>upload file</a> -->
-        <a  class="btn btn-primary directory-copy" href="#">copy</a>
-        <a  class="btn btn-primary directory-move" href="#">move</a>
-        <a  class="btn btn-primary directory-rename" href="#">rename</a>
-        <a  class="btn btn-primary directory-share" href="#">share</a>
-        <a  class="btn btn-primary directory-remove" href="#">remove</a>
+        <a class="btn btn-primary directory-copy" href="#">copy</a>
+        <a class="btn btn-primary directory-move" href="#">move</a>
+        <a class="btn btn-primary directory-rename" href="#">rename</a>
+        <a class="btn btn-primary directory-share" href="#">share</a>
+        <a class="btn btn-primary directory-remove" href="#">remove</a>
     </div>
+    <p class="text-dark">{{.Path}}</p>
     <table class="table">
         <tr>
-                <th><input type="checkbox"></th> <th>name</th>  <th>type</th> <th>size</th>  <th>modified</th> 
+            <th><input type="checkbox"></th>
+            <th>name</th>
+            <th>type</th>
+            <th>size</th>
+            <th>modified</th>
         </tr>
         {{range .Files}}
         {{$type:=index . "type"}}
         {{$insert_time:=index . "insert_time"}}
         {{$size:=index . "size"}}
-        <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}' commit_id='{{index . "commit_id"}}'>
+        <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}'
+            commit_id='{{index . "commit_id"}}'>
             <td><input type="checkbox"></td>
             <td><a style="color:blue" href="{{detailUrl .}}">{{index . "name"}}</a></td>
             <td>{{if eq $type "1"}}
@@ -26,10 +32,10 @@
                 {{else}}folder
                 {{end}}
                 {{if $size}}
-                <td>{{$size}} bytes</td>
-                {{else}}
-                <td></td>
-                {{end}}
+            <td>{{$size}} bytes</td>
+            {{else}}
+            <td></td>
+            {{end}}
             <td>{{formatTimeString $insert_time ""}}</td>
         </tr>
         {{end}}
@@ -38,129 +44,128 @@
 {{end}}
 {{define "scripts"}}
 <script>
-    async function uploadFile(inp) 
-{
-    let formData = new FormData();
-    let file = inp.files[0];      
-         
-    formData.append("file", file);
-    
-    try {
-       let r = await fetch('/upload/image', {method: "POST", body: formData}); 
-       console.log('HTTP response code:',r.status); 
-    } catch(e) {
-       console.log(e);
-    }
-    
-}
-    var delete_directory_url="{{.DirectoryUrlPath}}"
-    $(".directory-remove").on("click",function(){
-        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
-        $.each(checked_boxes,function(){
-            var id=$(this).parents("tr").attr("id")
-            var name=$(this).parents("tr").attr("name")
+    async function uploadFile(inp) {
+        let formData = new FormData();
+        let file = inp.files[0];
 
-            if(confirm("are you sure to delete '"+name+"' ?")){
-                var parameters={
-                id:id
+        formData.append("file", file);
+
+        try {
+            let r = await fetch('/upload/image', { method: "POST", body: formData });
+            console.log('HTTP response code:', r.status);
+        } catch (e) {
+            console.log(e);
+        }
+
+    }
+    var delete_directory_url = "{{.DirectoryUrlPath}}"
+    $(".directory-remove").on("click", function () {
+        var checked_boxes = document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes, function () {
+            var id = $(this).parents("tr").attr("id")
+            var name = $(this).parents("tr").attr("name")
+
+            if (confirm("are you sure to delete '" + name + "' ?")) {
+                var parameters = {
+                    id: id
                 }
                 $.ajax({
-                url: delete_directory_url+"?"+$.param(parameters),
-                type: 'DELETE',
-                success: function(result) {
-                if(result.error==null){  
-                    document.location.reload(true)
-                }else{
-                    alert(result.error)
-                }
-                }
-            })
-             }
-             return//just return,does not care other checked boxes if any.
-        })
-    })
-    var share_url="{{.ShareUrlPath}}"
-    $(".directory-share").on("click",function(){
-        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
-        $.each(checked_boxes,function(){
-            var name=$(this).parents("tr").attr("name")
-            var commit_id=$(this).parents("tr").attr("commit_id")
-            var path=new URLSearchParams(location.search).get("path")
-            var max_commit_id=new URLSearchParams(location.search).get("max")
-            if(confirm("are you sure to publicly share '"+name+"' ?")){
-                var parameters={
-                    commit_id:commit_id,
-                    max_commit_id:max_commit_id
-                }
-                if (path=="/"){
-                    parameters.path="/"+name
-                }else{
-                    parameters.path=path+"/"+name
-                }
-                $.ajax({
-                url: share_url,
-                type: 'POST',
-                data:$.param(parameters),
-                success: function(result) {
-                if(result.error==null){  
-                    window.open(result.data,"_blank")
-                }else{
-                    alert(result.error)
-                }
-                }
-            })
-             }
-             return//just return,does not care other checked boxes if any.
-        })
-    })
-    var file_move_path="{{.Path_File_Move}}"
-    $(".directory-move").on("click",function(){
-        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
-        $.each(checked_boxes,function(){
-            var directory="{{.File_Path}}"
-            var name=$(this).parents("tr").attr("name")
-            var file_type=$(this).parents("tr").attr("file_type")
-            var id=$(this).parents("tr").attr("id")
-            var parameters={
-                directory:directory,
-                name:name,
-                file_type:file_type,
-                id:id
+                    url: delete_directory_url + "?" + $.param(parameters),
+                    type: 'DELETE',
+                    success: function (result) {
+                        if (result.error == null) {
+                            document.location.reload(true)
+                        } else {
+                            alert(result.error)
+                        }
+                    }
+                })
             }
-            var url=file_move_path+"?"+$.param(parameters)
-            document.location.href=url
+            return//just return,does not care other checked boxes if any.
+        })
+    })
+    var share_url = "{{.ShareUrlPath}}"
+    $(".directory-share").on("click", function () {
+        var checked_boxes = document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes, function () {
+            var name = $(this).parents("tr").attr("name")
+            var commit_id = $(this).parents("tr").attr("commit_id")
+            var path = new URLSearchParams(location.search).get("path")
+            var max_commit_id = new URLSearchParams(location.search).get("max")
+            if (confirm("are you sure to publicly share '" + name + "' ?")) {
+                var parameters = {
+                    commit_id: commit_id,
+                    max_commit_id: max_commit_id
+                }
+                if (path == "/") {
+                    parameters.path = "/" + name
+                } else {
+                    parameters.path = path + "/" + name
+                }
+                $.ajax({
+                    url: share_url,
+                    type: 'POST',
+                    data: $.param(parameters),
+                    success: function (result) {
+                        if (result.error == null) {
+                            window.open(result.data, "_blank")
+                        } else {
+                            alert(result.error)
+                        }
+                    }
+                })
+            }
+            return//just return,does not care other checked boxes if any.
+        })
+    })
+    var file_move_path = "{{.Path_File_Move}}"
+    $(".directory-move").on("click", function () {
+        var checked_boxes = document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes, function () {
+            var directory = "{{.File_Path}}"
+            var name = $(this).parents("tr").attr("name")
+            var file_type = $(this).parents("tr").attr("file_type")
+            var id = $(this).parents("tr").attr("id")
+            var parameters = {
+                directory: directory,
+                name: name,
+                file_type: file_type,
+                id: id
+            }
+            var url = file_move_path + "?" + $.param(parameters)
+            document.location.href = url
             return//just return,does not care other if any.
         })
     })
-    var file_copy_path="{{.Path_File_Copy}}"
-    $(".directory-copy").on("click",function(){
-        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
-        $.each(checked_boxes,function(){
-            var directory="{{.File_Path}}"
-            var name=$(this).parents("tr").attr("name")
-            var file_type=$(this).parents("tr").attr("file_type")
-            var id=$(this).parents("tr").attr("id")
-            var parameters={
-                directory:directory,
-                name:name,
-                file_type:file_type,
-                id:id
+    var file_copy_path = "{{.Path_File_Copy}}"
+    $(".directory-copy").on("click", function () {
+        var checked_boxes = document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes, function () {
+            var directory = "{{.File_Path}}"
+            var name = $(this).parents("tr").attr("name")
+            var file_type = $(this).parents("tr").attr("file_type")
+            var id = $(this).parents("tr").attr("id")
+            var parameters = {
+                directory: directory,
+                name: name,
+                file_type: file_type,
+                id: id
             }
-            var url=file_copy_path+"?"+$.param(parameters)
-            document.location.href=url
+            var url = file_copy_path + "?" + $.param(parameters)
+            document.location.href = url
             return//just return,does not care other if any.
         })
     })
-    var file_rename_path="{{.Path_File_Rename}}"
-    $(".directory-rename").on("click",function(){
-        var checked_boxes=document.querySelectorAll('input[type=checkbox]:checked')
-        $.each(checked_boxes,function(){
-            var id=$(this).parents("tr").attr("id")
-            var parameters={
-                id:id
+    var file_rename_path = "{{.Path_File_Rename}}"
+    $(".directory-rename").on("click", function () {
+        var checked_boxes = document.querySelectorAll('input[type=checkbox]:checked')
+        $.each(checked_boxes, function () {
+            var id = $(this).parents("tr").attr("id")
+            var parameters = {
+                id: id
             }
-            var url=file_rename_path+"?"+$.param(parameters)
-            document.location.href=url
+            var url = file_rename_path + "?" + $.param(parameters)
+            document.location.href = url
             return//just return,does not care other checked boxes if any.
         })
     })

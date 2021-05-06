@@ -699,7 +699,7 @@ func (s *FileSyncWebServer) fileCommitHandler() goweb.HandlerFunc {
 type FileChange struct {
 	Id          string
 	Path        string
-	ChangeType  int //1 add,2 delete,3 move,4 rename,5 copy
+	ChangeType  int //1 add,2 delete,3 move,4 rename,5 copy, 6 modified
 	Source_Path string
 	Md5         *string
 }
@@ -727,15 +727,13 @@ func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit
 		if commit_id == v["start_commit_id"].(string) {
 			path, err = storage.GetFilePath(partition_id, id, commit_index)
 			if err != nil {
-				log.Println(err)
-				continue
+				panic(err)
 			}
 			change.ChangeType = 1
 		} else if commit_id == v["end_commit_id"].(string) {
 			path, err = storage.GetFilePath(partition_id, id, commit_index-1)
 			if err != nil {
-				log.Println(err)
-				continue
+				panic(err)
 			}
 			change.ChangeType = 2
 		}
@@ -745,7 +743,9 @@ func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit
 				if v2.Id == v["source"].(string) {
 					file_changes = append(file_changes[:i], file_changes[i+1:]...)
 					change.Source_Path = v2.Path
-					if filepath.Dir(change.Path) == filepath.Dir(v2.Path) {
+					if change.Path == v2.Path {
+						change.ChangeType = 6
+					} else if filepath.Dir(change.Path) == filepath.Dir(v2.Path) {
 						change.ChangeType = 4
 					} else {
 						change.ChangeType = 3
@@ -756,8 +756,7 @@ func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit
 			if change.Source_Path == "" {
 				change.Source_Path, err = storage.GetFilePath(partition_id, v["source"].(string), commit_index-1)
 				if err != nil {
-					log.Println(err)
-					continue
+					panic(err)
 				}
 				change.ChangeType = 5
 			}
