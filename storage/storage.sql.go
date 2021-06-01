@@ -241,9 +241,9 @@ func (d *fileManager) insertFile(name string, file_id string, p_file_id *string,
 	file := d.m.Tx.ScanRow(query, p_file_id, name)
 	if file != nil {
 		if file["type"] != "1" && t == 1 {
-			panic("A file with the same name exists in the directory")
-		} else if file["type"] != "2" && t == 2 {
 			panic("A directory with the same name exists in the directory")
+		} else if file["type"] != "2" && t == 2 {
+			panic("A file with the same name exists in the directory")
 		}
 		if t == 1 && file["file_info_id"].(string) != *file_info_id || file["is_hidden"].(string) != strconv.FormatBool(is_hidden) {
 			id := file["id"].(string)
@@ -302,29 +302,34 @@ func (d *fileManager) copyFile(id string, destination_path string, destination_n
 	}
 	source_path, exist := d.isExists(id)
 	if !exist {
-		return errors.New("this source file does not exist.")
+		return errors.New("this source file does not exist")
 	}
 
 	f := d.m.GetExactFileByPath(destination_path, d.partition_id)
 	if f == nil {
-		return errors.New("can not find the destination path.")
+		return errors.New("can not find the destination path")
 	}
 
 	source_file := d.m.GetFileById(id)
 	destination_file := d.m.GetFileById(f["id"].(string))
 
 	if destination_file.Type != 2 {
-		return errors.New("the destination path is not a folder.")
+		return errors.New("the destination path is not a folder")
 	}
 
 	if destination_path == source_path {
-		return errors.New("the source path can not be same as the destination path.")
+		return errors.New("the source path can not be same as the destination path")
 	}
 	if source_file.Type == 2 && strings.Index(destination_path, source_path) == 0 {
-		return errors.New("can not move a directory into a subdirectory of itself.")
+		return errors.New("can not move a directory into a subdirectory of itself")
 	}
 	if delete_souce {
 		d.deleteFile(source_file.Id)
+	} else {
+		//don't copy directory!
+		if source_file.Type == 2 {
+			return errors.New("can not copy a directory")
+		}
 	}
 	if destination_name == nil {
 		destination_name = &source_file.Name
