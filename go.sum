@@ -612,8 +612,6 @@ github.com/swishcloud/filesync v0.0.0-20210125011343-c7b1bd5bcfca h1:oD9Aq4yAax5
 github.com/swishcloud/filesync v0.0.0-20210125011343-c7b1bd5bcfca/go.mod h1:xzfVWVVLwALRUCOZxH+t6GYZYpqNAKa1JYoanC3vx+A=
 github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae h1:6wP+ZzbckSQpD3ZWUnkfiQHnNzpcwNO0vlpKNlcdD+0=
 github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae/go.mod h1:vo5+bdSqcRelUKQhw73YcxB54S35CkxgHMv2rfGGg/U=
-github.com/swishcloud/goweb v0.0.0-20210425093540-9519a008a25e h1:igBl8KtpBaMWyVX3FP/9vFwGY4Rl0SC95/HNHOoBsZ0=
-github.com/swishcloud/goweb v0.0.0-20210425093540-9519a008a25e/go.mod h1:Uqe1A6MKsXqCMF76Hg4UtnX583dselWEsYjkkv9C/Y4=
 github.com/swishcloud/goweb v0.0.0-20210606120101-117dbf8ac5d4 h1:GL34ZRI7Mph5gl7hULa4f3SsPsI6/7v/vYB4EOZvHeI=
 github.com/swishcloud/goweb v0.0.0-20210606120101-117dbf8ac5d4/go.mod h1:jHP2/q1vkHyqUNGdPYpNmc9PxJnCqkGZbdrvXIVGJak=
 github.com/swishcloud/identity-provider v0.0.0-20201224015539-19d534ef56f2 h1:exR98+4Po7X9y3rixrukATfui19ewOQ2mVPjAZ4YUQM=
@@ -757,8 +755,7 @@ golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421/go.mod h1:gOpvHmFTYa4Iltr
 golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
 golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
 golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
-golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c h1:SgVl/sCtkicsS7psKkje4H9YtjdEl3xsYh7N+5TDHqY=
-golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c/go.mod h1:KelEdhl1UZF7XfJ4dDtk6s++YSgaE7mD/BuKKDLBl4A=
+golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c h1:pkQiBZBvdos9qq4wBAHqlzuZHEXo07pqV06ef90u1WI=
 golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c/go.mod h1:KelEdhl1UZF7XfJ4dDtk6s++YSgaE7mD/BuKKDLBl4A=
 golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20181108010431-42b317875d0f/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=

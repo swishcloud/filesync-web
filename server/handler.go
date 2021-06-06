@@ -149,7 +149,6 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 					Files []map[string]interface{}
 				}{Files: files}
 				data.Path = filepath.Join(filepath.Base(share["path"].(string)), relative_path)
-				data.Path = data.Path[1:]
 				model := s.newPageModel(ctx, data)
 				model.PageTitle = full_name
 				ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {

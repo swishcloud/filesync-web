@@ -9,10 +9,7 @@ require (
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/google/uuid v1.2.0
-	github.com/lestrrat/go-jwx v0.0.0-20210302221443-a9d01c1b7121 // indirect
-	github.com/lestrrat/go-pdebug v0.0.0-20180220043741-569c97477ae8 // indirect
 	github.com/lib/pq v1.10.1
-	github.com/microcosm-cc/bluemonday v1.0.9 // indirect
 	github.com/spf13/cobra v1.1.3
 	github.com/swishcloud/filesync v0.0.0-20210125011343-c7b1bd5bcfca
 	github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae
