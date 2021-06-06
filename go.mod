@@ -16,8 +16,8 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/swishcloud/filesync v0.0.0-20210125011343-c7b1bd5bcfca
 	github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae
-	github.com/swishcloud/goweb v0.0.0-20210425093540-9519a008a25e
+	github.com/swishcloud/goweb v0.0.0-20210606120101-117dbf8ac5d4
 	github.com/swishcloud/identity-provider v0.0.0-20201224015539-19d534ef56f2
-	golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c
+	golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c
 	gopkg.in/yaml.v2 v2.4.0
 )
