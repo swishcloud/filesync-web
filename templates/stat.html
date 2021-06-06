@@ -1,0 +1,16 @@
+{{define "content"}}
+<div class="container">
+    <table class="table">
+        <tr>
+            <th>server</th>
+            <th>total file size</th>
+        </tr>
+        {{range .SUFTSs}}
+        <tr>
+            <td>{{index . "name"}}</td>
+            <td>{{format_file_size (index . "size")}}</td>
+        </tr>
+        {{end}}
+    </table>
+</div>
+{{end}}

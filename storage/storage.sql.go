@@ -328,7 +328,7 @@ func (d *fileManager) copyFile(id string, destination_path string, destination_n
 	} else {
 		//don't copy directory!
 		if source_file.Type == 2 {
-			return errors.New("can not copy a directory")
+			return errors.New("copying directories has been disabled")
 		}
 	}
 	if destination_name == nil {
@@ -433,7 +433,7 @@ func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id strin
 	}
 	directory := m.GetFile(path, partition_id, commit_id, 2)
 	if directory == nil {
-		return nil, errors.New("the directory does not exist.")
+		return nil, errors.New("the directory does not exist")
 	}
 	query := `select T.*,commit.insert_time as commit_insert_time from (select file.*,case when start_commit.index>directory_commit.index then start_commit.id else directory_commit.id end as commit_id,file_info.md5,file_info.size from file 
 	inner join commit start_commit on file.start_commit_id=start_commit.id
@@ -524,10 +524,10 @@ func (m *SQLManager) AddFileBlock(server_file_id, name string, start, end int64)
 	m.Tx.MustExec("update server_file set uploaded_size=$1 where id=$2 and $1>uploaded_size", end, server_file_id)
 }
 func (m *SQLManager) GetUserByOpId(op_id string) *models.User {
-	query := `SELECT id, name,partition_id FROM public."user" where op_id=$1;`
+	query := `SELECT id, name,partition_id,is_admin FROM public."user" where op_id=$1;`
 	row := m.Tx.MustQueryRow(query, op_id)
 	user := new(models.User)
-	err := row.Scan(&user.Id, &user.Name, &user.Partition_id)
+	err := row.Scan(&user.Id, &user.Name, &user.Partition_id, &user.Is_admin)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			panic(err)
@@ -550,8 +550,8 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) (user *models.User
 		new_partition_id := m.addPartition()
 		//add user
 		add := `INSERT INTO public."user"(
-			id, name, insert_time,op_id,partition_id)
-			VALUES ($1, $2, $3,$4,$5);`
+			id, name, insert_time,op_id,partition_id,is_admin)
+			VALUES ($1, $2, $3,$4,$5,false);`
 		m.Tx.MustExec(add, id, name, time.Now().UTC(), sub, new_partition_id)
 		actions := []Action{}
 		action := CreateDirectoryAction{Path: "/"}
@@ -561,7 +561,7 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) (user *models.User
 		}
 		user = m.GetUserByOpId(sub)
 		if user == nil {
-			err = errors.New("unknown error.")
+			err = errors.New("unknown error")
 		}
 	} else {
 		//update user name
@@ -571,7 +571,7 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) (user *models.User
 	}
 	return user, err
 }
-func (m *SQLManager) GetFilePath(partition_id string, id string, revision int64) (path string, err error) {
+func (m *SQLManager) GetFilePath(partition_id string, id string, max_revision int64) (path string, err error) {
 	query := `WITH RECURSIVE CTE as(
 		select p_file_id,cast(name as text) as path from file a
 		where id=$2
@@ -581,7 +581,7 @@ func (m *SQLManager) GetFilePath(partition_id string, id string, revision int64)
 		left join commit end_commit on file.end_commit_id=end_commit.id
 		inner join CTE on file.file_id=CTE.p_file_id where file.partition_id=$1 and start_commit.index<=$3 and (end_commit.index is null or end_commit.index>$3)
 )select path from CTE where p_file_id is null`
-	row := m.Tx.ScanRow(query, partition_id, id, revision)
+	row := m.Tx.ScanRow(query, partition_id, id, max_revision)
 	if row == nil {
 		log.Printf("unexpected exception.")
 		return "", errors.New("unexpected exception.")
@@ -623,4 +623,8 @@ func (m *SQLManager) GetFile(path string, partition_id string, commit_id string,
 }
 func (m *SQLManager) SetFileHidden(file_id string, is_hidden bool) {
 	m.Tx.MustExec("update file set is_hidden=$1 where id=$2", is_hidden, file_id)
+}
+
+func (m *SQLManager) GetServerUploadedFilesTotalSize() []map[string]interface{} {
+	return m.Tx.ScanRows("select server.name,t.* from (select server_id,sum(uploaded_size)as size from server_file where is_completed=true group by server_id) t join server on t.server_id=server.id")
 }

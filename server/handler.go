@@ -74,6 +74,7 @@ const (
 	Path_File_Commit        = "/file/commit"
 	Path_File_Commit_Detail = "/file/commit/detail"
 	Path_QRCode             = "/qr_code"
+	Path_Stat               = "/stat"
 )
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
@@ -147,7 +148,8 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 					Path  string
 					Files []map[string]interface{}
 				}{Files: files}
-				data.Path = filepath.Base(share["path"].(string))
+				data.Path = filepath.Join(filepath.Base(share["path"].(string)), relative_path)
+				data.Path = data.Path[1:]
 				model := s.newPageModel(ctx, data)
 				model.PageTitle = full_name
 				ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
@@ -213,6 +215,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_File_Commit, s.fileCommitHandler())
 	root.GET(Path_File_Commit_Detail, s.fileCommitDetailHandler())
 	open.GET(Path_QRCode, s.qrCodeHandler())
+	root.GET(Path_Stat, s.statHandler())
 }
 
 //dl value: 0 not download, 1 download
@@ -258,10 +261,24 @@ func (s *FileSyncWebServer) fileRenamePostHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.RenameAction{Id: id, NewName: name}
 		actions = append(actions, action)
+		path, err := s.GetStorage(ctx).GetFilePath(s.MustGetLoginUser(ctx).Partition_id, id, common.MaxInt64)
+		if err != nil {
+			panic(err)
+		}
+		regex, err := regexp.Compile(".*/")
+		if err != nil {
+			panic(err)
+		}
+		parent_path := regex.FindString(path)
+		parent_path = parent_path[:len(parent_path)-1]
+		histories := s.GetStorage(ctx).GetHistoryRevisions(parent_path, s.MustGetLoginUser(ctx).Partition_id, common.MaxInt64)
+		if len(histories) == 0 {
+			panic("can not find parent directory")
+		}
 		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
-		ctx.Success(nil)
+		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), parent_path, ""))
 	}
 }
 func (s *FileSyncWebServer) fileHistoryHandler() goweb.HandlerFunc {
@@ -300,10 +317,20 @@ func (s *FileSyncWebServer) fileEditPostHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.CreateDirectoryAction{Path: path}
 		actions = append(actions, action)
+		regex, err := regexp.Compile(".*/")
+		if err != nil {
+			panic(err)
+		}
+		parent_path := regex.FindString(path)
+		parent_path = parent_path[:len(parent_path)-1]
+		histories := s.GetStorage(ctx).GetHistoryRevisions(parent_path, s.MustGetLoginUser(ctx).Partition_id, common.MaxInt64)
+		if len(histories) == 0 {
+			panic("can not find destination directory")
+		}
 		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
-		ctx.Success(nil)
+		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), parent_path, ""))
 	}
 }
 func (s *FileSyncWebServer) fileMoveHandler() goweb.HandlerFunc {
@@ -318,10 +345,14 @@ func (s *FileSyncWebServer) fileMovePostHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.MoveAction{Id: id, DestinationPath: destination}
 		actions = append(actions, action)
+		histories := s.GetStorage(ctx).GetHistoryRevisions(destination, s.MustGetLoginUser(ctx).Partition_id, common.MaxInt64)
+		if len(histories) == 0 {
+			panic("can not find destination directory")
+		}
 		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
-		ctx.Success(nil)
+		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), destination, ""))
 	}
 }
 
@@ -337,14 +368,21 @@ func (s *FileSyncWebServer) fileCopyPostHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.CopyAction{Id: id, DestinationPath: destination}
 		actions = append(actions, action)
+		histories := s.GetStorage(ctx).GetHistoryRevisions(destination, s.MustGetLoginUser(ctx).Partition_id, common.MaxInt64)
+		if len(histories) == 0 {
+			panic("can not find destination directory")
+		}
 		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
-		ctx.Success(nil)
+		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), destination, ""))
 	}
 }
 func (s *FileSyncWebServer) serverHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		if !s.MustGetLoginUser(ctx).Is_admin {
+			panic("no permissions")
+		}
 		servers := s.GetStorage(ctx).GetServers()
 		ctx.FuncMap["editUrl"] = func(id string) (string, error) {
 			p := ""
@@ -370,6 +408,9 @@ func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) serverDeleteHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		if !s.MustGetLoginUser(ctx).Is_admin {
+			panic("no permissions")
+		}
 		id := ctx.Request.FormValue("id")
 		s.GetStorage(ctx).DeleteServer(id)
 		ctx.Success(nil)
@@ -377,6 +418,9 @@ func (s *FileSyncWebServer) serverDeleteHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) serverEditPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		if !s.MustGetLoginUser(ctx).Is_admin {
+			panic("no permissions")
+		}
 		id := ctx.Request.FormValue("id")
 		name := ctx.Request.FormValue("name")
 		ip := ctx.Request.FormValue("ip")
@@ -393,6 +437,9 @@ func (s *FileSyncWebServer) serverEditPostHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) serverEditHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		if !s.MustGetLoginUser(ctx).Is_admin {
+			panic("no permissions")
+		}
 		server_id := ctx.Request.FormValue("id")
 		server := &models.Server{}
 		if server_id != "" {
@@ -439,6 +486,19 @@ func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 		ctx.Success(nil)
 	}
 }
+func getFileListUrl(commit_id, path, max string) string {
+	parameters := url.Values{}
+	parameters.Add("path", path)
+	parameters.Add("commit_id", commit_id)
+	parameters.Add("max", max)
+	return Path_File_List + "?" + parameters.Encode()
+}
+func getFileUrl(commit_id, path string) string {
+	parameters := url.Values{}
+	parameters.Add("path", path)
+	parameters.Add("commit_id", commit_id)
+	return Path_File + "?" + parameters.Encode()
+}
 func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		path := ctx.Request.FormValue("path")
@@ -466,16 +526,9 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, Path_File_Copy: Path_File_Copy, File_Path: filepath.Join("/", path), Path_File_Rename: Path_File_Rename, ShareUrlPath: Path_File_Share}
 		ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
 			if file["type"] == "1" {
-				parameters := url.Values{}
-				parameters.Add("path", filepath.Join("/", path, file["name"].(string)))
-				parameters.Add("commit_id", file["commit_id"].(string))
-				return Path_File + "?" + parameters.Encode(), nil
+				return getFileUrl(file["commit_id"].(string), filepath.Join("/", path, file["name"].(string))), nil
 			} else {
-				parameters := url.Values{}
-				parameters.Add("path", filepath.Join("/", path, file["name"].(string)))
-				parameters.Add("commit_id", file["commit_id"].(string))
-				parameters.Add("max", max_commit_id)
-				return Path_File_List + "?" + parameters.Encode(), nil
+				return getFileListUrl(file["commit_id"].(string), filepath.Join("/", path, file["name"].(string)), max_commit_id), nil
 			}
 		}
 		ctx.FuncMap["isHidden"] = func(isHidden bool) (string, error) {
@@ -782,5 +835,14 @@ func (s *FileSyncWebServer) qrCodeHandler() goweb.HandlerFunc {
 		qrCode, _ := qr.Encode(str, qr.L, qr.Auto)
 		qrCode, _ = barcode.Scale(qrCode, 300, 300)
 		png.Encode(ctx.Writer, qrCode)
+	}
+}
+func (s *FileSyncWebServer) statHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		sizes := s.GetStorage(ctx).GetServerUploadedFilesTotalSize()
+		model := struct {
+			SUFTSs []map[string]interface{}
+		}{SUFTSs: sizes}
+		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/stat.html")
 	}
 }

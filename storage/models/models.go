@@ -7,6 +7,7 @@ type User struct {
 	Name         string
 	Avatar       string
 	Partition_id string
+	Is_admin     bool
 }
 type File struct {
 	Id          string

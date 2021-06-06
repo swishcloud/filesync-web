@@ -3,23 +3,27 @@
     <table class="table">
         <h2>{{.Path}}</h2>
         <tr>
-                <th>name</th>  <th>type</th> <th>size</th>  <th>modified</th> 
+            <th>name</th>
+            <th>type</th>
+            <th>size</th>
+            <th>modified</th>
         </tr>
         {{range .Files}}
-        {{$type:=index . "type"}} 
+        {{$type:=index . "type"}}
         {{$insert_time:=index . "insert_time"}}
         {{$size:=index . "size"}}
-        <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}' commit_id='{{index . "commit_id"}}'>
+        <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}'
+            commit_id='{{index . "commit_id"}}'>
             <td><a style="color:blue" href="{{detailUrl .}}">{{index . "name"}}</a></td>
             <td>{{if eq $type "1"}}
                 file
                 {{else}}folder
                 {{end}}
                 {{if $size}}
-                <td>{{$size}} bytes</td>
-                {{else}}
-                <td></td>
-                {{end}}
+            <td>{{format_file_size $size}}</td>
+            {{else}}
+            <td></td>
+            {{end}}
             <td>{{formatTimeString $insert_time ""}}</td>
         </tr>
         {{end}}

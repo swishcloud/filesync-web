@@ -10,7 +10,7 @@
         <a class="btn btn-primary directory-share" href="#">share</a>
         <a class="btn btn-primary directory-remove" href="#">remove</a>
     </div>
-    <p class="text-dark">{{.Path}}</p>
+    <p class="text-dark" style="padding-left: 20px;">{{.Path}}</p>
     <table class="table">
         <tr>
             <th><input type="checkbox"></th>
@@ -32,7 +32,7 @@
                 {{else}}folder
                 {{end}}
                 {{if $size}}
-            <td>{{$size}} bytes</td>
+            <td>{{format_file_size $size}}</td>
             {{else}}
             <td></td>
             {{end}}

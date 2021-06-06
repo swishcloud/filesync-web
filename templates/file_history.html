@@ -1,31 +1,38 @@
 {{define "content"}}
 <div class="container">
     <h4>{{.Path}}</h4>
-        <table class="table">
-                <tr>
-                <th>revision</th>    
-                <th>modified</th>    
-                <th>size</th>    
-                <th>user</th>    
-                </tr>
-                {{range .Histories}}
-                {{$time:=index . "insert_time"}}
-                <tr >
-                   <td><a style="color:blue" href="{{detailUrl .}}">{{index . "commit_id"}}</a></td>
-                   <td>{{formatTimeString $time ""}}</td>
-                   <td>
-                    {{if .size}}
-                    {{.size}} bytes
+    <table class="table">
+        <tr>
+            <th>revision</th>
+            <th>modified</th>
+            <th>size</th>
+            <th>user</th>
+        </tr>
+        {{range .Histories}}
+        {{$time:=index . "insert_time"}}
+        <tr>
+            <td>
+                <a style="color:blue" href="{{detailUrl .}}">
+                    {{index . "commit_id"}}
+                    {{if eq .is_deleted "true"}}
+                    [out of date]
                     {{end}}
-                    </td>
-                   <td>{{.user_name}}</td>
-                </tr>
+                </a>
+            </td>
+            <td>{{formatTimeString $time ""}}</td>
+            <td>
+                {{if .size}}
+                {{format_file_size .size}}
                 {{end}}
-            </table>
+            </td>
+            <td>{{.user_name}}</td>
+        </tr>
+        {{end}}
+    </table>
 </div>
 {{end}}
 {{define "scripts"}}
 <script>
-    
-    </script>
+
+</script>
 {{end}}
