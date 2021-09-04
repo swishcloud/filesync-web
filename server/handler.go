@@ -517,8 +517,13 @@ func (s *FileSyncWebServer) fileRedirectHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		id := ctx.Request.FormValue("id")
 		max_commit_id := ctx.Request.FormValue("max_commit_id")
+		max_commit := s.GetStorage(ctx).GetCommitById(max_commit_id)
+		max_commit_index, err := strconv.ParseInt(max_commit["index"].(string), 10, 64)
+		if err != nil {
+			panic(err)
+		}
 		user := s.MustGetLoginUser(ctx)
-		parents := s.GetStorage(ctx).GetParents(user.Partition_id, id)
+		parents := s.GetStorage(ctx).GetParents(user.Partition_id, id, max_commit_index)
 		path := "/"
 		for _, v := range parents {
 			path = filepath.Join(path, v["name"].(string))
@@ -575,8 +580,17 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			commit_id = commit["id"].(string)
 		}
 		max_commit_id := ctx.Request.FormValue("max")
+		max_commit_index := common.MaxInt64
+		if max_commit_id != "" {
+			max_commit := s.GetStorage(ctx).GetCommitById(max_commit_id)
+			if index, err := strconv.ParseInt(max_commit["index"].(string), 10, 64); err != nil {
+				panic(err)
+			} else {
+				max_commit_index = index
+			}
+		}
 		file := s.GetStorage(ctx).GetFile(path, user.Partition_id, commit_id, internal.Directory)
-		parents := s.GetStorage(ctx).GetParents(user.Partition_id, file["id"].(string))
+		parents := s.GetStorage(ctx).GetParents(user.Partition_id, file["id"].(string), max_commit_index)
 		_ = parents
 		files, err := s.GetStorage(ctx).GetFiles(path, commit_id, max_commit_id, s.MustGetLoginUser(ctx).Partition_id)
 		if err != nil {
@@ -913,12 +927,16 @@ func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit
 }
 func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		user := s.MustGetLoginUser(ctx)
 		commit_id := ctx.Request.FormValue("id")
-		file_changes := s.GetCommitFileChanges(s.GetStorage(ctx), commit_id, s.MustGetLoginUser(ctx).Partition_id)
+		previous_commit := s.GetStorage(ctx).GetPreviousCommit(user.Partition_id, commit_id)
+		file_changes := s.GetCommitFileChanges(s.GetStorage(ctx), commit_id, user.Partition_id)
 		model := struct {
-			Changes []FileChange
-		}{Changes: file_changes}
-		ctx.FuncMap["redirectUrl"] = func(id string) (string, error) {
+			Changes         []FileChange
+			CommitId        string
+			PeviousCommitId string
+		}{Changes: file_changes, CommitId: commit_id, PeviousCommitId: previous_commit["id"].(string)}
+		ctx.FuncMap["redirectUrl"] = func(id string, commit_id string) (string, error) {
 			parameters := url.Values{}
 			parameters.Add("id", id)
 			parameters.Add("max_commit_id", commit_id)

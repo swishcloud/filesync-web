@@ -84,6 +84,11 @@ func (m *SQLManager) GetNextCommit(partition_id string, commit_id string) map[st
 	return m.Tx.ScanRow(query, partition_id, commit_id)
 }
 
+func (m *SQLManager) GetPreviousCommit(partition_id string, commit_id string) map[string]interface{} {
+	query := `select * from commit where partition_id=$1 and index<(select index from commit where id=$2 and partition_id=$1) order by index desc limit 1`
+	return m.Tx.ScanRow(query, partition_id, commit_id)
+}
+
 func (m *SQLManager) GetCommitChanges(partition_id string, commit_id string) []map[string]interface{} {
 	query := `select file.*,file_info.md5,case when end_commit_id=$2 then true else false end as del from file left join file_info on file.file_info_id=file_info.id where partition_id=$1 and (start_commit_id=$2 or end_commit_id=$2) order by del desc`
 	return m.Tx.ScanRows(query, partition_id, commit_id)
@@ -438,11 +443,15 @@ func (m *SQLManager) getParents(path string, file_id string, commit_id string) [
 		`
 	return m.Tx.ScanRows(query, path, file_id, commit_id)
 }
-func (m *SQLManager) GetParents(partition_id string, id string) []map[string]interface{} {
+func (m *SQLManager) GetParents(partition_id string, id string, max_revision int64) []map[string]interface{} {
 	query := `
 	WITH RECURSIVE CTE as(select * from file where id=$1 and partition_id=$2
 					  union select file.* from CTE join
-					  file on CTE.p_file_id=file.file_id where file.partition_id=$2
+					  file on CTE.p_file_id=file.file_id					 
+					  inner join commit start_commit on file.start_commit_id=start_commit.id
+					  left join commit end_commit on file.end_commit_id=end_commit.id
+					  where start_commit.index<=$3 and (end_commit.index is null or end_commit.index>=$3) 
+					  and file.partition_id=$2
 					 ),
 CTE2 as(select CTE.*,start_commit_id as commit_id,parent_commit_index.index as index from CTE
 		join commit parent_commit_index on parent_commit_index.id=CTE.start_commit_id
@@ -457,7 +466,7 @@ CTE2 as(select CTE.*,start_commit_id as commit_id,parent_commit_index.index as i
 select * from CTE2
 		
 	`
-	return m.Tx.ScanRows(query, id, partition_id)
+	return m.Tx.ScanRows(query, id, partition_id, max_revision)
 }
 func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id string, partition_id string) (files []map[string]interface{}, err error) {
 	if max_commit_id == "" {

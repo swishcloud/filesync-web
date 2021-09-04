@@ -39,9 +39,10 @@ type Storage interface {
 	GetCommitById(commit_id string) map[string]interface{}
 	GetRecentCommits(partition_id string) []map[string]interface{}
 	GetNextCommit(partition_id string, commit_id string) map[string]interface{}
+	GetPreviousCommit(partition_id string, commit_id string) map[string]interface{}
 	GetCommitChanges(partition_id string, commit_id string) []map[string]interface{}
 	GetFilePath(partition_id string, id string, max_revision int64) (path string, err error)
 	ResetServerFile(partition_id string, server_file_id string)
 	GetServerUploadedFilesTotalSize() []map[string]interface{}
-	GetParents(partition_id string, id string) []map[string]interface{}
+	GetParents(partition_id string, id string, max_revision int64) []map[string]interface{}
 }

@@ -7,12 +7,14 @@
             <th>file type</th>
             <th>action</th>
         </tr>
+        {{$CommitId:=.CommitId}}
+        {{$PeviousCommitId:=.PeviousCommitId}}
         {{range .Changes}}
         <tr>
-            <td><a style="color: blue;" href="{{redirectUrl .Id}}">{{.Path}}</a></td>
+            <td><a style="color: blue;" href="{{redirectUrl .Id $CommitId}}">{{.Path}}</a></td>
             <td>
                 {{if .Source_Path}}
-                <a style="color: blue;" href="{{redirectUrl .SourceId}}">{{.Source_Path}}</a>
+                <a style="color: blue;" href="{{redirectUrl .SourceId $PeviousCommitId}}">{{.Source_Path}}</a>
                 {{end}}
             </td>
             <td>{{if eq .FileType 1}}
