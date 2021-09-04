@@ -450,7 +450,7 @@ func (m *SQLManager) GetParents(partition_id string, id string, max_revision int
 					  file on CTE.p_file_id=file.file_id					 
 					  inner join commit start_commit on file.start_commit_id=start_commit.id
 					  left join commit end_commit on file.end_commit_id=end_commit.id
-					  where start_commit.index<=$3 and (end_commit.index is null or end_commit.index>=$3) 
+					  where start_commit.index<=$3 and (end_commit.index is null or end_commit.index>$3) 
 					  and file.partition_id=$2
 					 ),
 CTE2 as(select CTE.*,start_commit_id as commit_id,parent_commit_index.index as index from CTE
