@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	_ "github.com/lib/pq"
+	"github.com/swishcloud/filesync-web/internal"
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/gostudy/tx"
 )
@@ -92,7 +93,17 @@ func (m *SQLManager) GetShareByToken(token string) map[string]interface{} {
 	row := m.Tx.ScanRow(query, token)
 	return row
 }
-func (m *SQLManager) AddShare(path string, partition_id string, commit_id string, max_commit_id string, user_id string) (token string) {
+
+func (m *SQLManager) GetShares(partition_id string) []map[string]interface{} {
+	query := `select * from public.share where partition_id=$1`
+	return m.Tx.ScanRows(query, partition_id)
+}
+
+func (m *SQLManager) DeleteShare(partition_id string, token string) {
+	query := `delete FROM public.share where partition_id=$1 and token=$2`
+	m.Tx.MustExec(query, partition_id, token)
+}
+func (m *SQLManager) AddShare(path string, partition_id string, commit_id string, max_commit_id string, user_id string, file_type internal.FILE_TYPE) (token string) {
 	//check if the sharing record already exists.
 	query := `select * from public.share where path=$1 and commit_id=$2 and max_commit_id=$3`
 	row := m.Tx.ScanRow(query, path, commit_id, max_commit_id)
@@ -105,9 +116,9 @@ func (m *SQLManager) AddShare(path string, partition_id string, commit_id string
 		panic(err)
 	}
 	sql := `INSERT INTO public.share(
-		id, token, path, commit_id, max_commit_id, insert_time, user_id,partition_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7,$8);`
-	m.Tx.MustExec(sql, uuid.New(), token, path, commit_id, max_commit_id, time.Now().UTC(), user_id, partition_id)
+		id, token, path, commit_id, max_commit_id, insert_time, user_id,partition_id,file_type)
+		VALUES ($1, $2, $3, $4, $5, $6, $7,$8,$9);`
+	m.Tx.MustExec(sql, uuid.New(), token, path, commit_id, max_commit_id, time.Now().UTC(), user_id, partition_id, file_type)
 	return token
 }
 func (m *SQLManager) GetExactFileByPath(path string, partition_id string) map[string]interface{} {
@@ -426,6 +437,27 @@ func (m *SQLManager) getParents(path string, file_id string, commit_id string) [
 		inner join CTE on file.file_id=CTE.p_file_id)select * from CTE 
 		`
 	return m.Tx.ScanRows(query, path, file_id, commit_id)
+}
+func (m *SQLManager) GetParents(partition_id string, id string) []map[string]interface{} {
+	query := `
+	WITH RECURSIVE CTE as(select * from file where id=$1 and partition_id=$2
+					  union select file.* from CTE join
+					  file on CTE.p_file_id=file.file_id where file.partition_id=$2
+					 ),
+CTE2 as(select CTE.*,start_commit_id as commit_id,parent_commit_index.index as index from CTE
+		join commit parent_commit_index on parent_commit_index.id=CTE.start_commit_id
+		 where p_file_id is null
+	   union select CTE.*,
+		case when child_commit.index>CTE2.index then child_commit.id else CTE2.commit_id end,
+		case when child_commit.index>CTE2.index then child_commit.index else CTE2.index end
+		from CTE2
+	   join CTE on CTE2.file_id=CTE.p_file_id
+	   join commit child_commit on child_commit.id=CTE.start_commit_id 
+	   )
+select * from CTE2
+		
+	`
+	return m.Tx.ScanRows(query, id, partition_id)
 }
 func (m *SQLManager) GetFiles(path string, commit_id string, max_commit_id string, partition_id string) (files []map[string]interface{}, err error) {
 	if max_commit_id == "" {

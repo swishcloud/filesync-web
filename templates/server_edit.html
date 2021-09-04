@@ -1,60 +1,62 @@
 {{define "content"}}
-    <div class="container">
-        <form method="post" class="col-lg-4" >
-            <input name="id" type="hidden" value="{{.server.Id}}">
-            <div id="error">
-            </div>
-            <div class="form-group">
-                <label for="name">name</label>
-                <input type="text" class="form-control" id="name" name="name" placeholder="server name" value="{{.server.Name}}" required>
-            </div>
-            <div class="form-group">
-                <label for="ip">ip</label>
-                <input type="text" class="form-control" id="ip" name="ip" placeholder="ip" value="{{.server.Ip}}" required>
-            </div>
-            <div class="form-group">
-                <label for="port">port</label>
-                <input type="text" class="form-control" id="port" name="port" placeholder="port" value="{{.server.Port}}" required>
-            </div>
-            <button  type="submit" class="btn btn-primary">save</button>
-            {{if .server.Ip}}
-            <button  type="button" id="delete" class="btn btn-danger">remove</button>
-            {{end}}
-        </form>
-    </div>
+<div class="container">
+    <form method="post" class="col-lg-4">
+        <input name="id" type="hidden" value="{{.server.Id}}">
+        <div id="error">
+        </div>
+        <div class="form-group">
+            <label for="name">name</label>
+            <input type="text" class="form-control" id="name" name="name" placeholder="server name"
+                value="{{.server.Name}}" required>
+        </div>
+        <div class="form-group">
+            <label for="ip">ip</label>
+            <input type="text" class="form-control" id="ip" name="ip" placeholder="ip" value="{{.server.Ip}}" required>
+        </div>
+        <div class="form-group">
+            <label for="port">port</label>
+            <input type="text" class="form-control" id="port" name="port" placeholder="port" value="{{.server.Port}}"
+                required>
+        </div>
+        <button type="submit" class="btn btn-primary">save</button>
+        {{if .server.Ip}}
+        <button type="button" id="delete" class="btn btn-danger">remove</button>
+        {{end}}
+    </form>
+</div>
 {{end}}
 
 {{define "scripts"}}
-    <script>
-        app.ajaxSubmit($("form:last"), {
-            before: function () {
-                app.closeError($('#error'))
-            },
-            success: function (res) {
-                if (res.error) {
-                        app.showError($('#error'), res.error)
-                } else {
-                        window.location.href = "/server"
-                }
+<script>
+    app.ajaxSubmit($("form:last"), {
+        before: function () {
+            app.closeError($('#error'))
+        },
+        success: function (res) {
+            if (res.error) {
+                app.showError($('#error'), res.error)
+            } else {
+                window.location.href = "/server"
             }
-        })
-
-    var delete_url="{{.DeleteUrl}}"
-    $("#delete").on("click",function(){
-        if(confirm("are you sure to delete this server?")){
-            $.ajax({
-            url: delete_url,
-            type: 'DELETE',
-            headers: {Accept: "application/json"},
-            success: function(result) {
-                if(result.error==null){
-                    document.location.href="/server"
-                }else{
-                    alert(result.error)
-                }
-             }
-        })
         }
     })
-    </script>
+
+    var delete_url = "{{.DeleteUrl}}"
+    $("#delete").on("click", function () {
+        if (confirm("are you sure you want to delete this server?")) {
+            $.ajax({
+                url: delete_url,
+                type: 'DELETE',
+                headers: { Accept: "application/json" },
+                success: function (result) {
+                    if (result.error == null) {
+                        document.location.href = "/server"
+                    } else {
+                        alert(result.error)
+                    }
+                }
+            })
+        }
+    })
+</script>
 {{end}}

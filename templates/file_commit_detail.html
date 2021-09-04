@@ -4,12 +4,23 @@
         <tr>
             <th>path</th>
             <th>source</th>
-            <th>type</th>
+            <th>file type</th>
+            <th>action</th>
         </tr>
         {{range .Changes}}
         <tr>
-            <td>{{.Path}}</td>
-            <td>{{.Source_Path}}</td>
+            <td><a style="color: blue;" href="{{redirectUrl .Id}}">{{.Path}}</a></td>
+            <td>
+                {{if .Source_Path}}
+                <a style="color: blue;" href="{{redirectUrl .SourceId}}">{{.Source_Path}}</a>
+                {{end}}
+            </td>
+            <td>{{if eq .FileType 1}}
+                file
+                {{else if eq .FileType 2}}folder
+                {{else}}unknown
+                {{end}}
+            </td>
             <td>
                 {{if eq .ChangeType 1}}
                 add

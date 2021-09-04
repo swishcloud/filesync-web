@@ -10,7 +10,7 @@
         <a class="btn btn-primary directory-share" href="#">share</a>
         <a class="btn btn-primary directory-remove" href="#">remove</a>
     </div>
-    <p class="text-dark" style="padding-left: 20px;">{{.Path}}</p>
+    <p class="text-dark">{{.Path}}</p>
     <table class="table">
         <tr>
             <th><input type="checkbox"></th>
@@ -31,7 +31,8 @@
                 file
                 {{else}}folder
                 {{end}}
-                {{if $size}}
+            </td>
+            {{if $size}}
             <td>{{format_file_size $size}}</td>
             {{else}}
             <td></td>
@@ -65,7 +66,7 @@
             var id = $(this).parents("tr").attr("id")
             var name = $(this).parents("tr").attr("name")
 
-            if (confirm("are you sure to delete '" + name + "' ?")) {
+            if (confirm("are you sure you want to delete '" + name + "' ?")) {
                 var parameters = {
                     id: id
                 }
@@ -90,12 +91,14 @@
         $.each(checked_boxes, function () {
             var name = $(this).parents("tr").attr("name")
             var commit_id = $(this).parents("tr").attr("commit_id")
+            var file_type = $(this).parents("tr").attr("file_type")
             var path = new URLSearchParams(location.search).get("path")
             var max_commit_id = new URLSearchParams(location.search).get("max")
-            if (confirm("are you sure to publicly share '" + name + "' ?")) {
+            if (confirm("are you sure you want to publicly share '" + name + "' ?")) {
                 var parameters = {
                     commit_id: commit_id,
-                    max_commit_id: max_commit_id
+                    max_commit_id: max_commit_id,
+                    file_type: file_type
                 }
                 if (path == "/") {
                     parameters.path = "/" + name

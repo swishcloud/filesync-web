@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"github.com/swishcloud/filesync-web/internal"
 	"github.com/swishcloud/filesync-web/storage/models"
 )
 
@@ -28,7 +29,9 @@ type Storage interface {
 	SuperDoFileActions(actions []Action, user_id, partition_id string) (err error)
 	GetHistoryRevisions(path, partition_id string, max_revision int64) []map[string]interface{}
 	GetExactFileByPath(path string, partition_id string) map[string]interface{}
-	AddShare(path string, partition_id string, commit_id string, max_commit_id string, user_id string) (token string)
+	GetShares(partition_id string) []map[string]interface{}
+	DeleteShare(partition_id string, token string)
+	AddShare(path string, partition_id string, commit_id string, max_commit_id string, user_id string, file_type internal.FILE_TYPE) (token string)
 	GetShareByToken(token string) map[string]interface{}
 	GetPartitionLatestCommit(partition_id string) map[string]interface{}
 	GetPartitionFirstCommit(partition_id string) map[string]interface{}
@@ -40,4 +43,5 @@ type Storage interface {
 	GetFilePath(partition_id string, id string, max_revision int64) (path string, err error)
 	ResetServerFile(partition_id string, server_file_id string)
 	GetServerUploadedFilesTotalSize() []map[string]interface{}
+	GetParents(partition_id string, id string) []map[string]interface{}
 }

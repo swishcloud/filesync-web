@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"image/png"
 	"io"
 	"log"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
+	"github.com/swishcloud/filesync-web/internal"
 	"github.com/swishcloud/filesync-web/storage"
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/filesync/message"
@@ -56,6 +58,7 @@ func (s *FileSyncWebServer) newPageModel(ctx *goweb.Context, data interface{}) p
 const (
 	Path_Index              = "/"
 	Path_File               = "/file"
+	Path_File_Redirect      = "/file/redirect"
 	Path_File_Rename        = "/file_rename"
 	Path_File_Edit          = "/file_edit"
 	Path_File_History       = "/file/history"
@@ -79,7 +82,9 @@ const (
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open := root.Group()
+	open.Use(s.genericMiddleware())
 	root.Use(s.genericMiddleware())
+	root.Use(s.checkLoginMiddleware())
 	open.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
 		http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))).ServeHTTP(context.Writer, context.Request)
 	})
@@ -188,6 +193,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		}
 	})
 	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
+	root.GET(Path_File_Redirect, s.fileRedirectHandler())
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File, s.fileDetailsHandler())
 	root.GET(Path_File_List, s.fileListHandler())
@@ -210,7 +216,9 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_File_Rename, s.fileRenameHandler())
 	root.POST(Path_File_Rename, s.fileRenamePostHandler())
 	open.POST(Path_File_Upload, s.fileUploadPostHandler())
+	root.GET(Path_File_Share, s.fileShareHandler())
 	root.POST(Path_File_Share, s.fileSharePostHandler())
+	root.DELETE(Path_File_Share, s.fileShareDeleteHandler())
 	root.GET(Path_File_Commit, s.fileCommitHandler())
 	root.GET(Path_File_Commit_Detail, s.fileCommitDetailHandler())
 	open.GET(Path_QRCode, s.qrCodeHandler())
@@ -227,17 +235,54 @@ func (s *FileSyncWebServer) generateShareUrl(path string, token string, dl strin
 	}
 	return "/sh/" + token + path + "?dl=" + dl
 }
+func (s *FileSyncWebServer) fileShareHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		partition_id := s.MustGetLoginUser(ctx).Partition_id
+		shares := s.GetStorage(ctx).GetShares(partition_id)
+		ctx.FuncMap["detailUrl"] = func(share map[string]interface{}) (string, error) {
+			return s.generateShareUrl("", share["token"].(string), "0"), nil
+		}
+		ctx.FuncMap["pathUrl"] = func(share map[string]interface{}) (string, error) {
+			if share["file_type"] == "1" {
+				return getFileUrl(share["commit_id"].(string), share["path"].(string)), nil
+			} else {
+				return getFileListUrl(share["commit_id"].(string), share["path"].(string), share["max_commit_id"].(string)), nil
+			}
+		}
+		model := struct {
+			Shares    []map[string]interface{}
+			DeleteUrl string
+		}{Shares: shares, DeleteUrl: Path_File_Share}
+		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/share_list.html")
+	}
+}
+func (s *FileSyncWebServer) fileShareDeleteHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		token := ctx.Request.FormValue("id")
+		share := s.GetStorage(ctx).GetShareByToken(token)
+		user := s.MustGetLoginUser(ctx)
+		if user.Id != share["user_id"].(string) {
+			panic("no permissions")
+		}
+		s.GetStorage(ctx).DeleteShare(user.Partition_id, token)
+		ctx.Success(Path_File_Share)
+	}
+}
 func (s *FileSyncWebServer) fileSharePostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		path := ctx.Request.FormValue("path")
 		commit_id := ctx.Request.FormValue("commit_id")
 		max_commit_id := ctx.Request.FormValue("max_commit_id")
+		file_type, err := strconv.Atoi(ctx.Request.FormValue("file_type"))
+		if err != nil {
+			panic(err)
+		}
 		partition_id := s.MustGetLoginUser(ctx).Partition_id
 		if max_commit_id == "" {
 			commit := s.GetStorage(ctx).GetPartitionLatestCommit(partition_id)
 			max_commit_id = commit["id"].(string)
 		}
-		token := s.GetStorage(ctx).AddShare(path, partition_id, commit_id, max_commit_id, s.MustGetLoginUser(ctx).Id)
+		token := s.GetStorage(ctx).AddShare(path, partition_id, commit_id, max_commit_id, s.MustGetLoginUser(ctx).Id, file_type)
 		ctx.Success(s.generateShareUrl("", token, "0"))
 	}
 }
@@ -458,18 +503,40 @@ func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
 			user := s.GetStorage(ctx).GetUserByOpId(session.Claims["sub"].(string))
 			ctx.Data["user"] = user
-		} else {
+		}
+	}
+}
+func (s *FileSyncWebServer) checkLoginMiddleware() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		if ctx.Data["user"] == nil {
 			http.Redirect(ctx.Writer, ctx.Request, Path_Login, 302)
 		}
 	}
 }
-func (s *FileSyncWebServer) authenticateHandler() goweb.HandlerFunc {
+func (s *FileSyncWebServer) fileRedirectHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
+		id := ctx.Request.FormValue("id")
+		max_commit_id := ctx.Request.FormValue("max_commit_id")
+		user := s.MustGetLoginUser(ctx)
+		parents := s.GetStorage(ctx).GetParents(user.Partition_id, id)
+		path := "/"
+		for _, v := range parents {
+			path = filepath.Join(path, v["name"].(string))
+		}
+		file := parents[len(parents)-1]
+		commit_id := file["commit_id"].(string)
+		url := ""
+		if file["type"].(string) == strconv.Itoa(internal.Directory) {
+			url = getFileListUrl(commit_id, path, max_commit_id)
+		} else {
+			url = getFileUrl(commit_id, path)
+		}
+		http.Redirect(ctx.Writer, ctx.Request, url, http.StatusFound)
 	}
 }
 func (s *FileSyncWebServer) indexHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		http.Redirect(ctx.Writer, ctx.Request, Path_File_List+"?path=/", 302)
+		http.Redirect(ctx.Writer, ctx.Request, Path_File_List+"?path=/", http.StatusFound)
 	}
 }
 
@@ -508,12 +575,15 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			commit_id = commit["id"].(string)
 		}
 		max_commit_id := ctx.Request.FormValue("max")
+		file := s.GetStorage(ctx).GetFile(path, user.Partition_id, commit_id, internal.Directory)
+		parents := s.GetStorage(ctx).GetParents(user.Partition_id, file["id"].(string))
+		_ = parents
 		files, err := s.GetStorage(ctx).GetFiles(path, commit_id, max_commit_id, s.MustGetLoginUser(ctx).Partition_id)
 		if err != nil {
 			panic(err)
 		}
 		data := struct {
-			Path             string
+			Path             template.HTML
 			Files            []map[string]interface{}
 			DirectoryUrlPath string
 			ShareUrlPath     string
@@ -522,7 +592,24 @@ func (s *FileSyncWebServer) fileListHandler() goweb.HandlerFunc {
 			Path_File_Copy   string
 			Path_File_Rename string
 			File_Path        string
-		}{Path: path, Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, Path_File_Copy: Path_File_Copy, File_Path: filepath.Join("/", path), Path_File_Rename: Path_File_Rename, ShareUrlPath: Path_File_Share}
+		}{Files: files, DirectoryUrlPath: Path_Directory, Path_File_Edit: Path_File_Edit, Path_File_Move: Path_File_Move, Path_File_Copy: Path_File_Copy, File_Path: filepath.Join("/", path), Path_File_Rename: Path_File_Rename, ShareUrlPath: Path_File_Share}
+		tmp_path := "/"
+		html := ""
+		for _, p := range parents {
+			name := p["name"].(string)
+			tmp_path = filepath.Join(tmp_path, name)
+			url := getFileListUrl(p["commit_id"].(string), tmp_path, max_commit_id)
+			if strings.Count(tmp_path, "/") > 1 {
+				html += "<span style='margin:10px;'>/</span>"
+			} else {
+				html += "<span style='margin:10px;'></span>"
+			}
+			if name == "" {
+				name = "/"
+			}
+			html += "<a style='color:blue' href='" + url + "'>" + name + "<a>"
+		}
+		data.Path = template.HTML(html)
 		ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
 			if file["type"] == "1" {
 				return getFileUrl(file["commit_id"].(string), filepath.Join("/", path, file["name"].(string))), nil
@@ -750,10 +837,12 @@ func (s *FileSyncWebServer) fileCommitHandler() goweb.HandlerFunc {
 
 type FileChange struct {
 	Id          string
+	SourceId    string
 	Path        string
 	ChangeType  int //1 add,2 delete,3 move,4 rename,5 copy, 6 modified
 	Source_Path string
 	Md5         *string
+	FileType    internal.FILE_TYPE
 }
 
 func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit_id string, partition_id string) []FileChange {
@@ -765,8 +854,12 @@ func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit
 	changes := storage.GetCommitChanges(partition_id, commit_id)
 	file_changes := []FileChange{}
 	for _, v := range changes {
-		fmt.Println(v)
 		change := FileChange{}
+		file_type, err := strconv.Atoi(v["type"].(string))
+		if err != nil {
+			panic(err)
+		}
+		change.FileType = file_type
 		id := v["id"].(string)
 		change.Id = id
 		if v["md5"] != nil {
@@ -791,8 +884,9 @@ func (s *FileSyncWebServer) GetCommitFileChanges(storage storage.Storage, commit
 		}
 		change.Path = path
 		if change.ChangeType == 1 && v["source"] != nil {
+			change.SourceId = v["source"].(string)
 			for i, v2 := range file_changes {
-				if v2.Id == v["source"].(string) {
+				if v2.Id == change.SourceId {
 					file_changes = append(file_changes[:i], file_changes[i+1:]...)
 					change.Source_Path = v2.Path
 					if change.Path == v2.Path {
@@ -824,6 +918,12 @@ func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
 		model := struct {
 			Changes []FileChange
 		}{Changes: file_changes}
+		ctx.FuncMap["redirectUrl"] = func(id string) (string, error) {
+			parameters := url.Values{}
+			parameters.Add("id", id)
+			parameters.Add("max_commit_id", commit_id)
+			return Path_File_Redirect + "?" + parameters.Encode(), nil
+		}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_commit_detail.html")
 	}
 }
