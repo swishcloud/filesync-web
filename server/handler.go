@@ -82,7 +82,6 @@ const (
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open := root.Group()
-	open.Use(s.genericMiddleware())
 	root.Use(s.genericMiddleware())
 	root.Use(s.checkLoginMiddleware())
 	open.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
@@ -196,6 +195,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 
 		}
 	})
+	open.Use(s.genericMiddleware())
 	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.GET(Path_File_Redirect, s.fileRedirectHandler())
 	root.GET(Path_Index, s.indexHandler())
