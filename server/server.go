@@ -250,6 +250,15 @@ func (s *FileSyncWebServer) GetLoginUser(ctx *goweb.Context) (*models.User, erro
 	}
 	return ctx.Data["user"].(*models.User), nil
 }
+func (s *FileSyncWebServer) showErrorPage(ctx *goweb.Context, status int, msg string) {
+	data := struct {
+		Desc string
+	}{Desc: msg}
+	model := s.newPageModel(ctx, data)
+	model.PageTitle = "ERROR"
+	ctx.Writer.WriteHeader(status)
+	ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+}
 
 type HandlerWidget struct {
 	s *FileSyncWebServer

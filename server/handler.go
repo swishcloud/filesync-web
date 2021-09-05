@@ -94,6 +94,10 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		token := strs[1]
 		relative_path := strings.Join(strs[2:], "/")
 		share := s.GetStorage(ctx).GetShareByToken(token)
+		if share == nil {
+			s.showErrorPage(ctx, http.StatusNotFound, "The sharing files not found or expired")
+			return
+		}
 		path := filepath.Join(share["path"].(string), relative_path)
 		share_partition_id := share["partition_id"].(string)
 		dl := ctx.Request.FormValue("dl")
