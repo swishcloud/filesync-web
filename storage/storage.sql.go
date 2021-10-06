@@ -287,7 +287,6 @@ func (d *fileManager) insertFile(name string, file_id string, p_file_id *string,
 	}
 	d.m.Tx.MustExec(insert_file, uuid.New(), time.Now().UTC(), name, "", d.user_id, file_info_id, false, is_hidden, t, d.commit_id, file_id, stored_p_file_id, d.partition_id, source)
 }
-
 func (d *fileManager) isExists(id string) (path string, exist bool) {
 	query := `
 	WITH RECURSIVE CTE AS (
@@ -530,7 +529,7 @@ func (m *SQLManager) GetServerFileByServerFileId(server_file_id string) *models.
 	return m.getServerFile("b.id=$1", server_file_id)
 }
 func (m *SQLManager) getServerFile(where string, args ...interface{}) *models.ServerFile {
-	var sqlstr = `SELECT a.md5,file.id,file.name,file.is_hidden,file.p_file_id,a.size,a.path,b.id,file.insert_time,b.uploaded_size,b.is_completed,c.name as server_name,c.ip,c.port
+	var sqlstr = `SELECT a.md5,file.id,file.name,file.is_hidden,file.is_deleted,file.p_file_id,a.size,a.path,b.id,file.insert_time,b.uploaded_size,b.is_completed,c.name as server_name,c.ip,c.port
 	from file_info as a 
 	inner join  server_file as b on a.id=b.file_info_id 
 	inner join  server as c on b.server_id=c.id 
@@ -540,7 +539,7 @@ func (m *SQLManager) getServerFile(where string, args ...interface{}) *models.Se
 	sqlstr += " order by uploaded_size desc"
 	row := m.Tx.MustQueryRow(sqlstr, args...)
 	data := &models.ServerFile{}
-	err := row.Scan(&data.Md5, &data.File_id, &data.Name, &data.Is_hidden, &data.P_file_id, &data.Size, &data.Path, &data.Server_file_id, &data.Insert_time, &data.Uploaded_size, &data.Is_completed, &data.Server_name, &data.Ip, &data.Port)
+	err := row.Scan(&data.Md5, &data.File_id, &data.Name, &data.Is_hidden, &data.Is_deleted, &data.P_file_id, &data.Size, &data.Path, &data.Server_file_id, &data.Insert_time, &data.Uploaded_size, &data.Is_completed, &data.Server_name, &data.Ip, &data.Port)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
@@ -668,4 +667,19 @@ func (m *SQLManager) SetFileHidden(file_id string, is_hidden bool) {
 
 func (m *SQLManager) GetServerUploadedFilesTotalSize() []map[string]interface{} {
 	return m.Tx.ScanRows("select server.name,t.* from (select server_id,sum(uploaded_size)as size from server_file where is_completed=true group by server_id) t join server on t.server_id=server.id")
+}
+
+func (m *SQLManager) Delete_histories(days int) {
+	time := time.Now().UTC().Add(time.Duration(-days) * time.Hour * 24)
+	sql := `WITH RECURSIVE t AS(
+		select * from file where end_commit_id is not null and insert_time<$1 and is_deleted=false
+		UNION
+		select file.* from file
+		join t on file.p_file_id=t.file_id
+		join commit c1 on t.end_commit_id=c1.id
+		join commit c2 on file.start_commit_id=c2.id
+		where c1.index>c2.index and file.partition_id=t.partition_id 
+	)
+	update file set is_deleted=true where id in (select id from t);`
+	m.Tx.MustExec(sql, time)
 }

@@ -45,4 +45,5 @@ type Storage interface {
 	ResetServerFile(partition_id string, server_file_id string)
 	GetServerUploadedFilesTotalSize() []map[string]interface{}
 	GetParents(partition_id string, id string, max_revision int64) []map[string]interface{}
+	Delete_histories(days int)
 }

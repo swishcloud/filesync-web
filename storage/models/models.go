@@ -59,6 +59,7 @@ type ServerFile struct {
 	Port           int
 	Size           int64
 	Is_hidden      bool
+	Is_deleted     bool
 }
 
 type Server struct {

@@ -131,6 +131,9 @@ func (s *FileSyncWebServer) fileApiGetHandler() goweb.HandlerFunc {
 		commit_id := ctx.Request.FormValue("commit_id")
 		user := s.MustGetLoginUser(ctx)
 		file := s.GetStorage(ctx).GetFile(path, user.Partition_id, commit_id, 1)
+		if file == nil {
+			panic("not found the file")
+		}
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(file["id"].(string))
 		ctx.Success(server_file)
 	}

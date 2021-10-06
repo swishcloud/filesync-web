@@ -136,6 +136,17 @@ func (s *TcpServer) Serve() {
 		log.Fatal(err)
 	}
 	defer l.Close()
+	//run timed tasks
+	go func() {
+		for {
+			m := storage.NewSQLManager(s.config.DB_CONN_INFO)
+			m.Delete_histories(5)
+			if err := m.Commit(); err != nil {
+				log.Print(err)
+			}
+			time.Sleep(time.Minute)
+		}
+	}()
 	// Handle the sessions in a new goroutine.
 	go s.serveSessions()
 	for {
