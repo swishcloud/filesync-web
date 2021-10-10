@@ -686,6 +686,6 @@ func (m *SQLManager) Delete_histories(days int) {
 
 func (m *SQLManager) Query_server_files_to_be_deleted(server_id string) []map[string]interface{} {
 	sql := `select server_file.*,file_info.path,file_info.md5 from server_file join file_info on server_file.file_info_id=file_info.id where file_info.id in(select file_info.id from file_info left join file on file_info.id=file.file_info_id group by file_info.id
-		having bool_and(is_deleted)=true or count(is_deleted)=0) and server_id=$1`
+		having bool_and(is_deleted)=true or count(is_deleted)=0) and server_file.is_completed=true and server_id=$1`
 	return m.Tx.ScanRows(sql, server_id)
 }
