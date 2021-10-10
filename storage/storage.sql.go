@@ -44,8 +44,8 @@ func (m *SQLManager) Commit() error {
 func (m *SQLManager) Rollback() error {
 	return m.Tx.Rollback()
 }
-func (m *SQLManager) ResetServerFile(partition_id string, server_file_id string) {
-	//do not reset whole files
+func (m *SQLManager) ResetServerFile(server_file_id string) {
+	/*//do not reset whole files
 	row := m.Tx.ScanRow(`select is_completed from server_file where id=$1`, server_file_id)
 	is_completed, err := strconv.ParseBool(row["is_completed"].(string))
 	if err != nil {
@@ -53,7 +53,7 @@ func (m *SQLManager) ResetServerFile(partition_id string, server_file_id string)
 	}
 	if is_completed {
 		panic("can not reset a server file which has wholly uploaded")
-	}
+	}*/
 	m.Tx.MustExec(`update server_file set uploaded_size=0,is_completed=false where id=$1`, server_file_id)
 	m.Tx.MustExec(`delete from file_block where server_file_id=$1`, server_file_id)
 }
@@ -682,4 +682,12 @@ func (m *SQLManager) Delete_histories(days int) {
 	)
 	update file set is_deleted=true where id in (select id from t);`
 	m.Tx.MustExec(sql, time)
+}
+
+func (m *SQLManager) Query_server_files_to_be_deleted(server_id string) []map[string]interface{} {
+	sql := `select server_file.*,file_info.path from file_info
+	join server_file on file_info.id= server_file.file_info_id
+	join file on file_info.id=file.file_info_id
+	where file.is_deleted=true and server_file.is_completed=true and server_id=$1`
+	return m.Tx.ScanRows(sql, server_id)
 }

@@ -15,22 +15,25 @@ import (
 )
 
 const (
-	API_PATH_File_INFO      = "/api/file-info"
-	API_PATH_File_Upload    = "/api/file_upload"
-	API_PATH_File           = "/api/file"
-	API_PATH_File_Block     = "/api/file-block"
-	API_PATH_Login          = "/api/login"
-	API_PATH_Exchange_Token = "/api/exchange_token"
-	API_PATH_Auth_Code_Url  = "/api/auth_code_url"
-	API_PATH_Directory      = "/api/directory"
-	API_PATH_Log            = "/api/log"
-	API_PATH_Commit_Changes = "/api/commit/changes"
-	API_PATH_Files          = "/api/files"
-	API_Reset_Server_File   = "/api/reset-server-file"
+	API_PATH_File_INFO                  = "/api/file-info"
+	API_PATH_File_Upload                = "/api/file_upload"
+	API_PATH_File                       = "/api/file"
+	API_PATH_File_Block                 = "/api/file-block"
+	API_PATH_Server_Files_To_BE_Deleted = "/api/server-file/tobedeleted"
+	API_PATH_Login                      = "/api/login"
+	API_PATH_Exchange_Token             = "/api/exchange_token"
+	API_PATH_Auth_Code_Url              = "/api/auth_code_url"
+	API_PATH_Directory                  = "/api/directory"
+	API_PATH_Log                        = "/api/log"
+	API_PATH_Commit_Changes             = "/api/commit/changes"
+	API_PATH_Files                      = "/api/files"
+	API_Reset_Server_File               = "/api/reset-server-file"
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.Use(func(ctx *goweb.Context) { ctx.Writer.EnsureInitialzed(false) })
+	group.GET(API_PATH_Server_Files_To_BE_Deleted, s.serverFilesToBeDeletedGetHandler())
+	group.POST(API_Reset_Server_File, s.resetServerFile())
 	group.Use(s.apiMiddleware())
 	group.GET(API_PATH_File_INFO, s.fileInfoApiGetHandler())
 	group.POST(API_PATH_File_Upload, s.fileUploadApiPostHandler())
@@ -48,7 +51,6 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.GET(API_PATH_Log, s.logApiGetHandler())
 	group.GET(API_PATH_Commit_Changes, s.commitChangesGetHandler())
 	group.GET(API_PATH_Files, s.filesGetHandler())
-	group.POST(API_Reset_Server_File, s.resetServerFile())
 }
 
 func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
@@ -311,8 +313,13 @@ func (s *FileSyncWebServer) filesGetHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) resetServerFile() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		id := ctx.Request.FormValue("id")
-		user := s.MustGetLoginUser(ctx)
-		s.GetStorage(ctx).ResetServerFile(user.Partition_id, id)
+		s.GetStorage(ctx).ResetServerFile(id)
 		ctx.Success(nil)
+	}
+}
+func (s *FileSyncWebServer) serverFilesToBeDeletedGetHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		server_id := ctx.Request.FormValue("id")
+		ctx.Success(s.GetStorage(ctx).Query_server_files_to_be_deleted(server_id))
 	}
 }
