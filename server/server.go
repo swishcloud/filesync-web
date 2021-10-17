@@ -38,6 +38,7 @@ type Config struct {
 	temp_folder    string
 	Tls_cert_file  string `yaml:"tls_cert_file"`
 	Tls_key_file   string `yaml:"tls_key_file"`
+	HISTORY_DAYS_N int    `yaml:"HISTORY_DAYS_N"`
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`
@@ -140,7 +141,7 @@ func (s *TcpServer) Serve() {
 	go func() {
 		for {
 			m := storage.NewSQLManager(s.config.DB_CONN_INFO)
-			m.Delete_histories(5)
+			m.Delete_histories(s.config.HISTORY_DAYS_N)
 			if err := m.Commit(); err != nil {
 				log.Print(err)
 			}

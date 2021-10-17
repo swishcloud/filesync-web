@@ -17,3 +17,4 @@ oauth:
 file_location: .cache/files/
 tls_cert_file: .cache/localhost.crt
 tls_key_file: .cache/localhost.key
+HISTORY_DAYS_N: 0

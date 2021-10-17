@@ -672,15 +672,17 @@ func (m *SQLManager) GetServerUploadedFilesTotalSize() []map[string]interface{} 
 func (m *SQLManager) Delete_histories(days int) {
 	time := time.Now().UTC().Add(time.Duration(-days) * time.Hour * 24)
 	sql := `WITH RECURSIVE t AS(
-		select * from file where end_commit_id is not null and insert_time<$1 and is_deleted=false
+		select file_id from
+		(select file_id,CASE WHEN end_commit.insert_time<$1 THEN true ELSE false END as _deleted
+		from file left join commit end_commit on file.end_commit_id=end_commit.id where file_id in (select file_id from file where end_commit_id is not null and is_deleted=false)
+		)a1 
+		group by file_id having bool_and(_deleted)
 		UNION
-		select file.* from file
-		join t on file.p_file_id=t.file_id
-		join commit c1 on t.end_commit_id=c1.id
-		join commit c2 on file.start_commit_id=c2.id
-		where c1.index>c2.index and file.partition_id=t.partition_id 
+		select f1.file_id from file f1
+		inner join t on f1.p_file_id=t.file_id
+		where (select count(*) from file f2 where (f2.end_commit_id is not null) and f2.file_id=f1.file_id)=0
 	)
-	update file set is_deleted=true where id in (select id from t);`
+	update file set is_deleted=true where file_id in (select * from t);`
 	m.Tx.MustExec(sql, time)
 }
 
