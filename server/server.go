@@ -29,6 +29,7 @@ import (
 
 type Config struct {
 	Listen_ip      string      `yaml:"listen_ip"`
+	Listen_port    string      `yaml:"listen_port"`
 	Tcp_port       int         `yaml:"tcp_port"`
 	Website_domain string      `yaml:"website_domain"`
 	FILE_LOCATION  string      `yaml:"file_location"`
@@ -241,7 +242,7 @@ func (s *FileSyncWebServer) Serve() {
 	s.bindHandlers(s.engine.RouterGroup.Group())
 	apiGroup := s.engine.RouterGroup.Group()
 	s.bindApiHandlers(apiGroup)
-	addr := s.config.Listen_ip + ":2002"
+	addr := s.config.Listen_ip + ":" + s.config.Listen_port
 	log.Println("listening on https://" + addr)
 	err := http.ListenAndServeTLS(addr, s.config.Tls_cert_file, s.config.Tls_key_file, s.engine)
 	if err != nil {
