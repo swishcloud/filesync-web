@@ -39,6 +39,7 @@ type Config struct {
 	Tls_cert_file  string `yaml:"tls_cert_file"`
 	Tls_key_file   string `yaml:"tls_key_file"`
 	HISTORY_DAYS_N int    `yaml:"HISTORY_DAYS_N"`
+	FILESYNC_PATH  string `yaml:"FILESYNC_PATH"`
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`

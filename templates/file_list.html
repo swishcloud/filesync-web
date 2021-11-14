@@ -3,7 +3,7 @@
     <input id="file" style="display:none" type="file" onchange="uploadFile(this)">
     <div class="mb-3">
         <a class="btn btn-primary" href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
-        <!-- <a  class="btn btn-primary" href="javascript::#" onclick='$("#file").click();'>upload file</a> -->
+        <a class="btn btn-primary" href="#" onclick='$("#file").click()'>upload file</a>
         <a class="btn btn-primary directory-copy" href="#">copy</a>
         <a class="btn btn-primary directory-move" href="#">move</a>
         <a class="btn btn-primary directory-rename" href="#">rename</a>
@@ -44,19 +44,35 @@
 </div>
 {{end}}
 {{define "scripts"}}
+<script src="/static/js/crypto-js-core.js"></script>
+<script src="/static/js/md5.js"></script>
 <script>
     async function uploadFile(inp) {
         let formData = new FormData();
         let file = inp.files[0];
 
-        formData.append("file", file);
+        var reader = new FileReader();
 
-        try {
-            let r = await fetch('/upload/image', { method: "POST", body: formData });
-            console.log('HTTP response code:', r.status);
-        } catch (e) {
-            console.log(e);
-        }
+        reader.onload = async function (event) {
+            var binary = event.target.result;
+            var md5str = CryptoJS.MD5(CryptoJS.enc.Latin1.parse(binary));
+
+            formData.append("file", file);
+            formData.append("md5", md5str);
+            formData.append("path", "{{.File_Path }}");
+
+            try {
+                let r = await fetch('/file/upload', { method: "POST", body: formData });
+                console.log('HTTP response code:', r.status);
+                if (r.status == 200) {
+                    window.location.reload();
+                }
+            } catch (e) {
+                console.log(e);
+            }
+        };
+
+        reader.readAsBinaryString(file);
 
     }
     var delete_directory_url = "{{.DirectoryUrlPath}}"

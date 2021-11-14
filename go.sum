@@ -614,6 +614,8 @@ github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae h1:6wP+ZzbckSQp
 github.com/swishcloud/gostudy v0.0.0-20210425093220-d43a5c8312ae/go.mod h1:vo5+bdSqcRelUKQhw73YcxB54S35CkxgHMv2rfGGg/U=
 github.com/swishcloud/goweb v0.0.0-20210606120101-117dbf8ac5d4 h1:GL34ZRI7Mph5gl7hULa4f3SsPsI6/7v/vYB4EOZvHeI=
 github.com/swishcloud/goweb v0.0.0-20210606120101-117dbf8ac5d4/go.mod h1:jHP2/q1vkHyqUNGdPYpNmc9PxJnCqkGZbdrvXIVGJak=
+github.com/swishcloud/goweb v0.0.0-20211114085325-9ae7831228c3 h1:YFecXMA+6ZC6GQ++6D2rw4lvzJICozaZh4rtNFnVKiA=
+github.com/swishcloud/goweb v0.0.0-20211114085325-9ae7831228c3/go.mod h1:jHP2/q1vkHyqUNGdPYpNmc9PxJnCqkGZbdrvXIVGJak=
 github.com/swishcloud/identity-provider v0.0.0-20201224015539-19d534ef56f2 h1:exR98+4Po7X9y3rixrukATfui19ewOQ2mVPjAZ4YUQM=
 github.com/swishcloud/identity-provider v0.0.0-20201224015539-19d534ef56f2/go.mod h1:+EdPVDfH4Pz0NWNhJvlbl5LWlOXhQH9mB8CC73jruc0=
 github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
