@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"html/template"
 	"image/png"
@@ -712,7 +711,10 @@ func (s *FileSyncWebServer) loginHandler() goweb.HandlerFunc {
 		} else {
 			s.oAuth2Config.RedirectURL = s.config.OAuth.RedirectURL
 		}
-		url := s.oAuth2Config.AuthCodeURL("state-string", oauth2.AccessTypeOffline)
+		url, err := auth.AuthCodeURL(ctx, s.oAuth2Config)
+		if err != nil {
+			panic(err)
+		}
 		http.Redirect(ctx.Writer, ctx.Request, url, 302)
 	}
 }
@@ -736,12 +738,11 @@ func (s *FileSyncWebServer) addOrUpdateUser(ctx *goweb.Context, token *oauth2.To
 }
 func (s *FileSyncWebServer) loginCallbackHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		code := ctx.Request.URL.Query().Get("code")
-		token, err := s.oAuth2Config.Exchange(context.WithValue(context.Background(), "", s.httpClient), code)
+		token, err := auth.Exchange(ctx, s.oAuth2Config, s.httpClient)
 		if err != nil {
 			panic(err)
 		}
-		auth.Login(ctx, token, s.config.OAuth.JWKJsonUrl)
+		auth.Login(ctx, token, s.config.OAuth.JWKJsonUrl, nil)
 		http.Redirect(ctx.Writer, ctx.Request, Path_Index, 302)
 		s.addOrUpdateUser(ctx, token)
 	}
@@ -758,15 +759,14 @@ func (s *FileSyncWebServer) logoutHandler() goweb.HandlerFunc {
 		})
 	}
 }
-func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 string, filename string, location string, size int64) bool {
-	result := false
+func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 string, filename string, location string, size int64) (bool, error) {
 	session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	token, err := session.GetAccessToken(s.oAuth2Config)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	upload := exec.Command(s.config.FILESYNC_PATH, "upload", "--md5", md5, "--location", location, "--filename", filename, "--size", strconv.FormatInt(size, 10), "--token", token)
 	output := bytes.Buffer{}
@@ -776,12 +776,9 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 
 	err = upload.Run()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-	} else {
-		result = true
+		return false, err
 	}
-	print(output.String())
-	return result
+	return true, nil
 }
 func (s *FileSyncWebServer) fileUploadPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
@@ -801,10 +798,10 @@ func (s *FileSyncWebServer) fileUploadPostHandler() goweb.HandlerFunc {
 		if err != nil {
 			panic(err)
 		}
-		if upload_file(s, ctx, file, md5, header.Filename, path, header.Size) {
+		if ok, err := upload_file(s, ctx, file, md5, header.Filename, path, header.Size); ok {
 			ctx.Success(nil)
 		} else {
-			ctx.Failed("FAILED")
+			panic(err)
 		}
 	}
 }

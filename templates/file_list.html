@@ -1,6 +1,7 @@
 {{define "content"}}
-<div class="container">
-    <input id="file" style="display:none" type="file" onchange="uploadFile(this)">
+<div id="cont" class="container">
+    <div id="error"></div>
+    <input id="file" style="display:none" type="file" onchange="uploadFile(files[0])">
     <div class="mb-3">
         <a class="btn btn-primary" href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
         <a class="btn btn-primary" href="#" onclick='$("#file").click()'>upload file</a>
@@ -47,28 +48,28 @@
 <script src="/static/js/crypto-js-core.js"></script>
 <script src="/static/js/md5.js"></script>
 <script>
-    async function uploadFile(inp) {
+    async function uploadFile(file) {
+        app.closeError($('#error'));
         let formData = new FormData();
-        let file = inp.files[0];
 
         var reader = new FileReader();
 
         reader.onload = async function (event) {
             var binary = event.target.result;
             var md5str = CryptoJS.MD5(CryptoJS.enc.Latin1.parse(binary));
-
-            formData.append("file", file);
-            formData.append("md5", md5str);
-            formData.append("path", "{{.File_Path }}");
-
             try {
-                let r = await fetch('/file/upload', { method: "POST", body: formData });
-                console.log('HTTP response code:', r.status);
-                if (r.status == 200) {
+                formData.append("file", file);
+                formData.append("md5", md5str);
+                formData.append("path", "{{.File_Path }}");
+                let r = await fetch('/file/upload', { method: "POST", body: formData, headers: { "Accept": "application/json" } });
+                let res = await r.json()
+                if (res.error) {
+                    app.showError($('#error'), res.error)
+                } else {
                     window.location.reload();
                 }
-            } catch (e) {
-                console.log(e);
+            } catch (error) {
+                app.showError($('#error'), error)
             }
         };
 
@@ -188,5 +189,40 @@
             return//just return,does not care other checked boxes if any.
         })
     })
+
+
+    function dropHandler(ev) {
+        console.log('File(s) dropped');
+
+        // Prevent default behavior (Prevent file from being opened)
+        ev.preventDefault();
+
+        if (ev.dataTransfer.items) {
+            // Use DataTransferItemList interface to access the file(s)
+            for (var i = 0; i < ev.dataTransfer.items.length; i++) {
+                // If dropped items aren't files, reject them
+                if (ev.dataTransfer.items[i].kind === 'file') {
+                    var file = ev.dataTransfer.items[i].getAsFile();
+                    console.log('... file[' + i + '].name = ' + file.name);
+                    uploadFile(ev.dataTransfer.files[i])
+                }
+            }
+        } else {
+            // Use DataTransfer interface to access the file(s)
+            for (var i = 0; i < ev.dataTransfer.files.length; i++) {
+                console.log('... file[' + i + '].name = ' + ev.dataTransfer.files[i].name);
+                uploadFile(ev.dataTransfer.files[i])
+            }
+        }
+    }
+
+    function dragOverHandler(ev) {
+        console.log('File(s) in drop zone');
+
+        // Prevent default behavior (Prevent file from being opened)
+        ev.preventDefault();
+    }
+    this.ondrop = dropHandler
+    this.ondragover = dragOverHandler
 </script>
 {{end}}
