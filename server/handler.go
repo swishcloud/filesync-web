@@ -774,6 +774,12 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 	upload.Stdout = &output
 	upload.Stderr = os.Stderr
 
+	if s.skip_tls_verify {
+		env := os.Environ()
+		env = append(env, `development=true`)
+		upload.Env = env
+	}
+
 	err = upload.Run()
 	if err != nil {
 		return false, err

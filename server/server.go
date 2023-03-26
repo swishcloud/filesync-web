@@ -294,13 +294,13 @@ func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 			model.PageTitle = "ERROR"
 			ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
 		}
-	}
-
-	m := ctx.Data["storage"]
-	if m != nil {
-		err := m.(storage.Storage).Commit()
-		if err != nil {
-			log.Println(err)
+	} else {
+		m := ctx.Data["storage"]
+		if m != nil {
+			err := m.(storage.Storage).Commit()
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 
