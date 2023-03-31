@@ -529,7 +529,7 @@ func (m *SQLManager) GetServerFileByServerFileId(server_file_id string) *models.
 	return m.getServerFile("b.id=$1", server_file_id)
 }
 func (m *SQLManager) getServerFile(where string, args ...interface{}) *models.ServerFile {
-	var sqlstr = `SELECT a.md5,file.id,file.name,file.is_hidden,file.is_deleted,file.p_file_id,a.size,a.path,b.id,file.insert_time,b.uploaded_size,b.is_completed,c.name as server_name,c.ip,c.port
+	var sqlstr = `SELECT a.md5,file.id,file.name,file.is_hidden,file.is_deleted,file.p_file_id,a.size,a.path,b.id,file.insert_time,b.uploaded_size,b.is_completed,c.name as server_name,c.ip,c.port,file.user_id
 	from file_info as a 
 	inner join  server_file as b on a.id=b.file_info_id 
 	inner join  server as c on b.server_id=c.id 
@@ -539,7 +539,7 @@ func (m *SQLManager) getServerFile(where string, args ...interface{}) *models.Se
 	sqlstr += " order by uploaded_size desc"
 	row := m.Tx.MustQueryRow(sqlstr, args...)
 	data := &models.ServerFile{}
-	err := row.Scan(&data.Md5, &data.File_id, &data.Name, &data.Is_hidden, &data.Is_deleted, &data.P_file_id, &data.Size, &data.Path, &data.Server_file_id, &data.Insert_time, &data.Uploaded_size, &data.Is_completed, &data.Server_name, &data.Ip, &data.Port)
+	err := row.Scan(&data.Md5, &data.File_id, &data.Name, &data.Is_hidden, &data.Is_deleted, &data.P_file_id, &data.Size, &data.Path, &data.Server_file_id, &data.Insert_time, &data.Uploaded_size, &data.Is_completed, &data.Server_name, &data.Ip, &data.Port, &data.User_id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil

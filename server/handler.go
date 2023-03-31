@@ -77,6 +77,7 @@ const (
 	Path_File_Share         = "/file/share"
 	Path_File_Commit        = "/file/commit"
 	Path_File_Commit_Detail = "/file/commit/detail"
+	Path_File_Preview       = "/file/prvw"
 	Path_QRCode             = "/qr_code"
 	Path_Stat               = "/stat"
 )
@@ -198,6 +199,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	})
 	open.Use(s.genericMiddleware())
 	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
+	root.RegexMatch(regexp.MustCompile(Path_File_Preview+`/.+`), s.filePreviewHandler())
 	root.GET(Path_File_Redirect, s.fileRedirectHandler())
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File, s.fileDetailsHandler())
@@ -502,7 +504,7 @@ func (s *FileSyncWebServer) serverEditHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		if strings.Index(ctx.Request.URL.Path, Path_Download_File) != 0 {
+		if strings.Index(ctx.Request.URL.Path, Path_Download_File) != 0 && strings.Index(ctx.Request.URL.Path, Path_File_Preview) != 0 {
 			ctx.Writer.EnsureInitialzed(true)
 		}
 		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
@@ -676,6 +678,10 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		id := m_file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(id)
 		file := s.GetStorage(ctx).GetFileById(id)
+		previewUrl, err := s.getFilePreviewUrl(id, file.Name)
+		if err != nil {
+			panic(err)
+		}
 		if server_file == nil {
 			panic("file not found")
 		}
@@ -698,10 +704,21 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 			CanDelete           bool
 			HistoryUrl          string
 			Latest_revision_url string
+			PreviewUrl          string
 			IsLatest            bool
-		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url, History: history, IsLatest: is_lastest}
+		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url, History: history, IsLatest: is_lastest, PreviewUrl: previewUrl}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
+}
+
+func (s *FileSyncWebServer) getFilePreviewUrl(file_id string, filename string) (string, error) {
+	expansion := internal.ExpansionFromFileName(filename)
+	switch expansion {
+	case ".png":
+	case ".jpeg":
+		return "https://" + s.config.Website_domain + Path_File_Preview + "/" + filename + "?" + "id=" + url.QueryEscape(file_id), nil
+	}
+	return "", nil
 }
 
 func (s *FileSyncWebServer) loginHandler() goweb.HandlerFunc {
@@ -816,34 +833,45 @@ func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 		segments := strings.Split(ctx.Request.URL.Path, "/")
 		file_id := segments[3]
 		file_name := segments[4]
-		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_id)
-		if file_name != server_file.Name {
-			panic("file not found")
-		}
-		conn, err := net.Dial("tcp", server_file.Ip+":"+strconv.Itoa(server_file.Port))
-		if err != nil {
-			panic(err)
-		}
-		s := session.NewSession(conn)
-		msg := message.NewMessage(message.MT_Download_File)
-		msg.Header["path"] = server_file.Path
-		_, err = s.Fetch(msg, nil)
-		if err != nil {
-			panic(err)
-		}
-		ctx.Writer.Header().Set("Content-Type", "application/octet-stream")
-		ctx.Writer.Header().Set("Content-Disposition", `attachment; filename="`+server_file.Name+`"`)
-		ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(server_file.Size, 10))
-		if ctx.Writer.Compress {
-			panic("compression should not pick up")
-		}
-		_, err = io.CopyN(ctx.Writer, s, server_file.Size)
-		if err != nil {
-			log.Println(err)
-			panic(err)
-		}
-		s.Close()
+		s.downloadFile(ctx, file_id, file_name, "application/octet-stream", true)
 	}
+}
+
+func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, file_name string, contentType string, download bool) {
+	server_file := s.GetStorage(ctx).GetServerFileByFileId(file_id)
+	if server_file.User_id != s.MustGetLoginUser(ctx).Id {
+		panic("no permissions")
+	}
+	if file_name != server_file.Name {
+		panic("file not found")
+	}
+	conn, err := net.Dial("tcp", server_file.Ip+":"+strconv.Itoa(server_file.Port))
+	if err != nil {
+		panic(err)
+	}
+	session := session.NewSession(conn)
+	msg := message.NewMessage(message.MT_Download_File)
+	msg.Header["path"] = server_file.Path
+	_, err = session.Fetch(msg, nil)
+	if err != nil {
+		panic(err)
+	}
+	ctx.Writer.Header().Set("Content-Type", contentType)
+	if download {
+		ctx.Writer.Header().Set("Content-Disposition", `attachment; filename="`+server_file.Name+`"`)
+	} else {
+		ctx.Writer.Header().Set("Content-Disposition", `filename="`+server_file.Name+`"`)
+	}
+	ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(server_file.Size, 10))
+	if ctx.Writer.Compress {
+		panic("compression should not pick up")
+	}
+	_, err = io.CopyN(ctx.Writer, session, server_file.Size)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+	session.Close()
 }
 
 func (s *FileSyncWebServer) fileCommitHandler() goweb.HandlerFunc {
@@ -955,7 +983,16 @@ func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_commit_detail.html")
 	}
 }
-
+func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		segments := strings.Split(ctx.Request.URL.Path, "/")
+		file_name := segments[3]
+		file_id := ctx.Request.FormValue("id")
+		expansion := internal.ExpansionFromFileName(file_name)
+		contentType := internal.ContentTypeFromExpansion(expansion)
+		s.downloadFile(ctx, file_id, file_name, contentType, false)
+	}
+}
 func (s *FileSyncWebServer) qrCodeHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		str := ctx.Request.FormValue("str")

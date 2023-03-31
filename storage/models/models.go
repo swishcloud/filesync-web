@@ -60,6 +60,7 @@ type ServerFile struct {
 	Size           int64
 	Is_hidden      bool
 	Is_deleted     bool
+	User_id        string
 }
 
 type Server struct {

@@ -19,4 +19,4 @@ file_location: .cache/files/
 tls_cert_file: .cache/localhost.crt
 tls_key_file: .cache/localhost.key
 HISTORY_DAYS_N: 0
-FILESYNC_PATH: "/home/debian/workspace/c++/filesync-cpp/build/filesync/filesync"
+FILESYNC_PATH: "/workspace/c++/filesync/filesync-cpp/build/filesync/filesync"
