@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"log"
@@ -16,6 +17,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/jdeng/goheif"
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
@@ -715,8 +718,23 @@ func (s *FileSyncWebServer) getFilePreviewUrl(file_id string, filename string) (
 	expansion := internal.ExpansionFromFileName(filename)
 	switch expansion {
 	case ".png":
+		fallthrough
 	case ".jpeg":
+		fallthrough
+	case ".csv":
+		fallthrough
+	case ".html":
+		fallthrough
+	case ".sh":
+		fallthrough
+	case ".txt":
 		return "https://" + s.config.Website_domain + Path_File_Preview + "/" + filename + "?" + "id=" + url.QueryEscape(file_id), nil
+	case ".heic":
+		reg, err := regexp.Compile(`\.[^\/]+$`)
+		if err != nil {
+			panic(err)
+		}
+		return "https://" + s.config.Website_domain + Path_File_Preview + "/" + reg.ReplaceAllString(filename, ".jpeg") + "?" + "id=" + url.QueryEscape(file_id) + "&t=" + reg.FindString(filename), nil
 	}
 	return "", nil
 }
@@ -833,11 +851,19 @@ func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 		segments := strings.Split(ctx.Request.URL.Path, "/")
 		file_id := segments[3]
 		file_name := segments[4]
-		s.downloadFile(ctx, file_id, file_name, "application/octet-stream", true)
+		s.downloadFile(ctx, file_id, file_name, "", "application/octet-stream", true)
 	}
 }
 
-func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, file_name string, contentType string, download bool) {
+func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, file_name string, rawType string, contentType string, download bool) {
+	if rawType != "" {
+		reg, err := regexp.Compile(`\.[^\/]+$`)
+		if err != nil {
+			panic(err)
+		}
+		file_name = reg.ReplaceAllString(file_name, rawType)
+	}
+
 	server_file := s.GetStorage(ctx).GetServerFileByFileId(file_id)
 	if server_file.User_id != s.MustGetLoginUser(ctx).Id {
 		panic("no permissions")
@@ -850,6 +876,7 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, fil
 		panic(err)
 	}
 	session := session.NewSession(conn)
+	defer session.Close()
 	msg := message.NewMessage(message.MT_Download_File)
 	msg.Header["path"] = server_file.Path
 	_, err = session.Fetch(msg, nil)
@@ -862,18 +889,45 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, fil
 	} else {
 		ctx.Writer.Header().Set("Content-Disposition", `filename="`+server_file.Name+`"`)
 	}
-	ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(server_file.Size, 10))
 	if ctx.Writer.Compress {
 		panic("compression should not pick up")
 	}
-	_, err = io.CopyN(ctx.Writer, session, server_file.Size)
-	if err != nil {
-		log.Println(err)
-		panic(err)
-	}
-	session.Close()
-}
 
+	if strings.ToLower(rawType) == ".heic" {
+		//create a tmp file
+		tempFile, err := os.CreateTemp("", "")
+		if err != nil {
+			panic(err)
+		}
+		defer tempFile.Close()
+		defer os.Remove(tempFile.Name())
+
+		//download file data to the tmp file.
+		_, err = io.CopyN(tempFile, session, server_file.Size)
+		if err != nil {
+			os.Remove(tempFile.Name())
+			panic(err)
+		}
+
+		//begin decoding
+		img, err := goheif.Decode(tempFile)
+		if err != nil {
+			log.Panic(fmt.Sprintf("Failed to parse the heic file %s: %v\n", tempFile.Name(), err))
+		}
+		err = jpeg.Encode(ctx.Writer, img, nil)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		//The content length is known in this case.
+		ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(server_file.Size, 10))
+		_, err = io.CopyN(ctx.Writer, session, server_file.Size)
+		if err != nil {
+			log.Println(err)
+			panic(err)
+		}
+	}
+}
 func (s *FileSyncWebServer) fileCommitHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		commits := s.GetStorage(ctx).GetRecentCommits(s.MustGetLoginUser(ctx).Partition_id)
@@ -988,9 +1042,10 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 		segments := strings.Split(ctx.Request.URL.Path, "/")
 		file_name := segments[3]
 		file_id := ctx.Request.FormValue("id")
+		rawType := ctx.Request.FormValue("t")
 		expansion := internal.ExpansionFromFileName(file_name)
 		contentType := internal.ContentTypeFromExpansion(expansion)
-		s.downloadFile(ctx, file_id, file_name, contentType, false)
+		s.downloadFile(ctx, file_id, file_name, rawType, contentType, false)
 	}
 }
 func (s *FileSyncWebServer) qrCodeHandler() goweb.HandlerFunc {

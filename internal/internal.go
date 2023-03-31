@@ -17,6 +17,14 @@ func ContentTypeFromExpansion(expansion string) string {
 	switch expansion {
 	case ".jpeg":
 		return "image/jpeg"
+	case ".sh":
+		fallthrough
+	case ".txt":
+		return ""
+	case ".csv":
+		return "text/csv"
+	case ".html":
+		return "text/html"
 	}
 	return "application/octet-stream"
 }
