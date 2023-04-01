@@ -717,24 +717,18 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 func (s *FileSyncWebServer) getFilePreviewUrl(file_id string, filename string) (string, error) {
 	expansion := internal.ExpansionFromFileName(filename)
 	switch expansion {
-	case ".png":
-		fallthrough
-	case ".jpeg":
-		fallthrough
-	case ".csv":
-		fallthrough
-	case ".html":
-		fallthrough
-	case ".sh":
-		fallthrough
-	case ".txt":
-		return "https://" + s.config.Website_domain + Path_File_Preview + "/" + filename + "?" + "id=" + url.QueryEscape(file_id), nil
 	case ".heic":
 		reg, err := regexp.Compile(`\.[^\/]+$`)
 		if err != nil {
 			panic(err)
 		}
 		return "https://" + s.config.Website_domain + Path_File_Preview + "/" + reg.ReplaceAllString(filename, ".jpeg") + "?" + "id=" + url.QueryEscape(file_id) + "&t=" + reg.FindString(filename), nil
+	default:
+		for _, i := range s.config.ContentTypes {
+			if i.Extenstion == expansion {
+				return "https://" + s.config.Website_domain + Path_File_Preview + "/" + filename + "?" + "id=" + url.QueryEscape(file_id), nil
+			}
+		}
 	}
 	return "", nil
 }
@@ -1044,7 +1038,13 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 		file_id := ctx.Request.FormValue("id")
 		rawType := ctx.Request.FormValue("t")
 		expansion := internal.ExpansionFromFileName(file_name)
-		contentType := internal.ContentTypeFromExpansion(expansion)
+		contentType := ""
+		for _, i := range s.config.ContentTypes {
+			if i.Extenstion == expansion {
+				contentType = i.ContentType
+				break
+			}
+		}
 		s.downloadFile(ctx, file_id, file_name, rawType, contentType, false)
 	}
 }

@@ -20,3 +20,20 @@ tls_cert_file: .cache/localhost.crt
 tls_key_file: .cache/localhost.key
 HISTORY_DAYS_N: 0
 FILESYNC_PATH: "/workspace/c++/filesync/filesync-cpp/build/filesync/filesync"
+CONTENT_TYPES:
+- Extenstion: .png
+  ContentType: image/png
+- Extenstion: .jpeg
+  ContentType: 
+- Extenstion: .jpg
+  ContentType: 
+- Extenstion: .csv
+  ContentType: text/csv
+- Extenstion: .pdf
+  ContentType: application/pdf
+- Extenstion: .html
+  ContentType: text/html
+- Extenstion: .sh
+  ContentType: 
+- Extenstion: .txt
+  ContentType: 

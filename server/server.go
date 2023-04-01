@@ -37,10 +37,11 @@ type Config struct {
 	OAuth          ConfigOAuth `yaml:"oauth"`
 	upload_folder  string
 	temp_folder    string
-	Tls_cert_file  string `yaml:"tls_cert_file"`
-	Tls_key_file   string `yaml:"tls_key_file"`
-	HISTORY_DAYS_N int    `yaml:"HISTORY_DAYS_N"`
-	FILESYNC_PATH  string `yaml:"FILESYNC_PATH"`
+	Tls_cert_file  string              `yaml:"tls_cert_file"`
+	Tls_key_file   string              `yaml:"tls_key_file"`
+	HISTORY_DAYS_N int                 `yaml:"HISTORY_DAYS_N"`
+	FILESYNC_PATH  string              `yaml:"FILESYNC_PATH"`
+	ContentTypes   []ConfigContentType `yaml:"CONTENT_TYPES"`
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`
@@ -54,6 +55,10 @@ type ConfigOAuth struct {
 	LogoutRedirectUrl    string `yaml:"LogoutRedirectUrl"`
 	JWKJsonUrl           string `yaml:"JWKJsonUrl"`
 	UserInfoURL          string `yaml:"UserInfoURL"`
+}
+type ConfigContentType struct {
+	Extenstion  string `yaml:"Extenstion"`
+	ContentType string `yaml:"ContentType"`
 }
 type FileSyncWebServer struct {
 	engine          *goweb.Engine
@@ -96,6 +101,7 @@ func readConfig(configPath string) *Config {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	return config
 
 }
