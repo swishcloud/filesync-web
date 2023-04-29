@@ -7,17 +7,20 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jdeng/goheif"
 
 	"github.com/boombuler/barcode"
@@ -200,6 +203,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 
 		}
 	})
+	open.POST(Path_File_Upload, s.fileUploadPostHandler())
 	open.Use(s.genericMiddleware())
 	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.RegexMatch(regexp.MustCompile(Path_File_Preview+`/.+`), s.filePreviewHandler())
@@ -225,7 +229,6 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_File_History, s.fileHistoryHandler())
 	root.GET(Path_File_Rename, s.fileRenameHandler())
 	root.POST(Path_File_Rename, s.fileRenamePostHandler())
-	open.POST(Path_File_Upload, s.fileUploadPostHandler())
 	root.GET(Path_File_Share, s.fileShareHandler())
 	root.POST(Path_File_Share, s.fileSharePostHandler())
 	root.DELETE(Path_File_Share, s.fileShareDeleteHandler())
@@ -815,7 +818,41 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 	}
 	return true, nil
 }
+
 func (s *FileSyncWebServer) fileUploadPostHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		err := ctx.Request.ParseMultipartForm(1024 * 10)
+		if err != nil {
+			panic(err)
+		}
+		bytes, err := ioutil.ReadAll(ctx.Request.Body)
+		if err != nil {
+			panic(err)
+		}
+		println(string(bytes))
+		file, header, err := ctx.Request.FormFile("example")
+		if err != nil {
+			panic(err)
+		}
+		_ = header
+		filepath := path.Join(s.config.temp_folder, uuid.NewString()+".jpeg")
+		fo, err := os.Create(filepath)
+		if err != nil {
+			panic(err)
+		}
+		// close fo on exit and check for its returned error
+		defer func() {
+			if err := fo.Close(); err != nil {
+				panic(err)
+			}
+		}()
+		_, err = io.Copy(fo, file)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+func (s *FileSyncWebServer) fileUploadPostHandler2() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		err := ctx.Request.ParseMultipartForm(1024 * 10)
 		if err != nil {
