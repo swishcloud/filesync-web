@@ -196,9 +196,9 @@ func (s *TcpServer) serveSessions() {
 				msg.Header["partition_id"] = client.partition_id
 				storage.Commit()
 				if err := client.session.Send(msg, nil); err != nil {
-					go func() {
-						s.disconnect <- client.session
-					}()
+					go func(session *session.Session) {
+						s.disconnect <- session
+					}(client.session)
 				} else {
 					log.Println("notified a client")
 				}
