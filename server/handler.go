@@ -789,13 +789,16 @@ func (s *FileSyncWebServer) logoutHandler() goweb.HandlerFunc {
 	}
 }
 func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 string, filename string, location string, size int64) (bool, error) {
-	session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify)
+	token, err := auth.GetBearerToken(ctx)
 	if err != nil {
-		return false, err
-	}
-	token, err := session.GetAccessToken(s.oAuth2Config)
-	if err != nil {
-		return false, err
+		session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify)
+		if err != nil {
+			return false, err
+		}
+		token, err = session.GetAccessToken(s.oAuth2Config)
+		if err != nil {
+			return false, err
+		}
 	}
 	upload := exec.Command(s.config.FILESYNC_PATH, "upload", "--md5", md5, "--location", location, "--filename", filename, "--size", strconv.FormatInt(size, 10), "--token", token)
 	output := bytes.Buffer{}
@@ -811,6 +814,8 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 
 	err = upload.Run()
 	if err != nil {
+		fmt.Printf(output.String())
+		fmt.Printf(err.Error())
 		return false, err
 	}
 	return true, nil
@@ -1021,7 +1026,10 @@ func (s *FileSyncWebServer) fileCommitDetailHandler() goweb.HandlerFunc {
 			Changes         []FileChange
 			CommitId        string
 			PeviousCommitId string
-		}{Changes: file_changes, CommitId: commit_id, PeviousCommitId: previous_commit["id"].(string)}
+		}{Changes: file_changes, CommitId: commit_id}
+		if previous_commit != nil {
+			model.PeviousCommitId = previous_commit["id"].(string)
+		}
 		ctx.FuncMap["redirectUrl"] = func(id string, commit_id string) (string, error) {
 			parameters := url.Values{}
 			parameters.Add("id", id)
