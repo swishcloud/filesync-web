@@ -288,6 +288,13 @@ func (hw *HandlerWidget) Pre_Process(ctx *goweb.Context) {
 	log.Println(ctx.Request.Method, ctx.Request.URL)
 }
 func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
+	m := ctx.Data["storage"]
+	if m != nil {
+		err := m.(storage.Storage).Commit()
+		if err != nil {
+			log.Println(err)
+		}
+	}
 	if ctx.Err != nil {
 		accept := ctx.Request.Header.Get("Accept")
 		if strings.Contains(accept, "application/json") {
@@ -300,14 +307,5 @@ func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 			model.PageTitle = "ERROR"
 			ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
 		}
-	} else {
-		m := ctx.Data["storage"]
-		if m != nil {
-			err := m.(storage.Storage).Commit()
-			if err != nil {
-				log.Println(err)
-			}
-		}
 	}
-
 }
