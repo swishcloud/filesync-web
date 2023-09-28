@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -135,7 +136,18 @@ func NewFileSyncWebServer(configPath string, skip_tls_verify bool) *FileSyncWebS
 	}
 	return s
 }
-
+func (s *TcpServer) DeleteHistories() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("DeleteHistories panic:", r)
+		}
+	}()
+	m := storage.NewSQLManager(s.config.DB_CONN_INFO)
+	m.Delete_histories(s.config.HISTORY_DAYS_N)
+	if err := m.Commit(); err != nil {
+		log.Print(err)
+	}
+}
 func (s *TcpServer) Serve() {
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
@@ -148,11 +160,7 @@ func (s *TcpServer) Serve() {
 	//run timed tasks
 	go func() {
 		for {
-			m := storage.NewSQLManager(s.config.DB_CONN_INFO)
-			m.Delete_histories(s.config.HISTORY_DAYS_N)
-			if err := m.Commit(); err != nil {
-				log.Print(err)
-			}
+			s.DeleteHistories()
 			time.Sleep(time.Minute)
 		}
 	}()
