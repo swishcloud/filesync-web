@@ -143,10 +143,12 @@ func (s *TcpServer) DeleteHistories() {
 		}
 	}()
 	m := storage.NewSQLManager(s.config.DB_CONN_INFO)
+	defer func() {
+		if err := m.Commit(); err != nil {
+			log.Print(err)
+		}
+	}()
 	m.Delete_histories(s.config.HISTORY_DAYS_N)
-	if err := m.Commit(); err != nil {
-		log.Print(err)
-	}
 }
 func (s *TcpServer) Serve() {
 	// Listen on TCP port 2000 on all available unicast and
@@ -198,11 +200,11 @@ func (s *TcpServer) serveSessions() {
 				}
 				msg := message.NewMessage(message.MT_SYNC)
 				storage := storage.NewSQLManager(s.config.DB_CONN_INFO)
+				defer storage.Commit()
 				msg.Header["max"] = -1
 				msg.Header["max_commit_id"] = storage.GetPartitionLatestCommit(client.partition_id)["id"]
 				msg.Header["first_commit_id"] = storage.GetPartitionFirstCommit(client.partition_id)["id"]
 				msg.Header["partition_id"] = client.partition_id
-				storage.Commit()
 				if err := client.session.Send(msg, nil); err != nil {
 					go func(session *session.Session) {
 						s.disconnect <- session
@@ -241,6 +243,7 @@ func (s *TcpServer) serveClient(client *client) {
 			return
 		}
 		store := storage.NewSQLManager(s.fs.config.DB_CONN_INFO)
+		defer store.Commit()
 		user := store.GetUserByOpId(sub)
 		if user == nil {
 			log.Println("not found the user")
