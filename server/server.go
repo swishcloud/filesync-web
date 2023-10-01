@@ -257,7 +257,7 @@ func (s *FileSyncWebServer) Serve() {
 	apiGroup := s.engine.RouterGroup.Group()
 	s.bindApiHandlers(apiGroup)
 	addr := s.config.Listen_ip + ":" + s.config.Listen_port
-	log.Println("listening on https://" + addr)
+	log.Println("Website Url: https://" + s.config.Website_domain)
 	err := http.ListenAndServeTLS(addr, s.config.Tls_cert_file, s.config.Tls_key_file, s.engine)
 	if err != nil {
 		log.Fatal(err)

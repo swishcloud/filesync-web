@@ -2,7 +2,7 @@ version: "3.7"
 services:
   db:
     container_name: filesync-db
-    image: postgres:latest
+    image: postgres:14
     volumes:
       - "dbdata:/var/lib/postgresql/data"
     environment:
