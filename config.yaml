@@ -37,3 +37,5 @@ CONTENT_TYPES:
   ContentType: 
 - Extenstion: .txt
   ContentType: 
+CORS_Whitelist:
+  - https://192.168.1.1:8082

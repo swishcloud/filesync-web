@@ -43,6 +43,7 @@ type Config struct {
 	HISTORY_DAYS_N int                 `yaml:"HISTORY_DAYS_N"`
 	FILESYNC_PATH  string              `yaml:"FILESYNC_PATH"`
 	ContentTypes   []ConfigContentType `yaml:"CONTENT_TYPES"`
+	CORS_Whitelist []string            `yaml:"CORS_Whitelist"`
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`

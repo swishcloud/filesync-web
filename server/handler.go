@@ -1053,8 +1053,27 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 				break
 			}
 		}
+		CORSAndCaching(ctx.Request.Response, ctx.Request, s.config.CORS_Whitelist, true)
 		s.downloadFile(ctx, file_id, file_name, rawType, contentType, false)
 	}
+}
+func CORSAndCaching(response *http.Response, request *http.Request, cors_whitelist []string, permitCrendentials bool) {
+	origin := request.Header.Get("Origin")
+	in_whitelist := false
+	for _, v := range cors_whitelist {
+		if v == origin {
+			in_whitelist = true
+		}
+	}
+	if !in_whitelist {
+		fmt.Println("the origin is not in cors whitelist.")
+		return
+	}
+	if permitCrendentials {
+		response.Header.Set("Access-Control-Allow-Credentials", "true")
+	}
+	response.Header.Set("Access-Control-Allow-Origin", origin)
+	response.Header.Set("Vary", "Origin")
 }
 func (s *FileSyncWebServer) qrCodeHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
