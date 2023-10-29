@@ -1059,6 +1059,9 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 }
 func CORSAndCaching(response *http.Response, request *http.Request, cors_whitelist []string, permitCrendentials bool) {
 	origin := request.Header.Get("Origin")
+	if origin == "" {
+		return
+	}
 	in_whitelist := false
 	for _, v := range cors_whitelist {
 		if v == origin {
@@ -1066,7 +1069,7 @@ func CORSAndCaching(response *http.Response, request *http.Request, cors_whiteli
 		}
 	}
 	if !in_whitelist {
-		fmt.Println("the origin is not in cors whitelist.")
+		log.Println("the origin " + origin + " is not in cors whitelist.")
 		return
 	}
 	if permitCrendentials {
