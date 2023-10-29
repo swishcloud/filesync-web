@@ -1053,11 +1053,11 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 				break
 			}
 		}
-		CORSAndCaching(ctx.Request.Response, ctx.Request, s.config.CORS_Whitelist, true)
+		CORSAndCaching(ctx.Writer.ResponseWriter, ctx.Request, s.config.CORS_Whitelist, true)
 		s.downloadFile(ctx, file_id, file_name, rawType, contentType, false)
 	}
 }
-func CORSAndCaching(response *http.Response, request *http.Request, cors_whitelist []string, permitCrendentials bool) {
+func CORSAndCaching(writer http.ResponseWriter, request *http.Request, cors_whitelist []string, permitCrendentials bool) {
 	origin := request.Header.Get("Origin")
 	if origin == "" {
 		return
@@ -1073,10 +1073,10 @@ func CORSAndCaching(response *http.Response, request *http.Request, cors_whiteli
 		return
 	}
 	if permitCrendentials {
-		response.Header.Set("Access-Control-Allow-Credentials", "true")
+		writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
-	response.Header.Set("Access-Control-Allow-Origin", origin)
-	response.Header.Set("Vary", "Origin")
+	writer.Header().Set("Access-Control-Allow-Origin", origin)
+	writer.Header().Set("Vary", "Origin")
 }
 func (s *FileSyncWebServer) qrCodeHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
