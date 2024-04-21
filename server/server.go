@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/goweb/auth"
 
 	"github.com/swishcloud/filesync/message"
@@ -24,7 +25,6 @@ import (
 	"github.com/swishcloud/filesync-web/storage"
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/filesync/session"
-	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/goweb"
 )
 
