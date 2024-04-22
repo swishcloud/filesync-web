@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"image/jpeg"
@@ -17,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jdeng/goheif"
 
@@ -201,7 +203,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		}
 	})
 	open.Use(s.genericMiddleware())
-	root.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
+	open.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.RegexMatch(regexp.MustCompile(Path_File_Preview+`/.+`), s.filePreviewHandler())
 	root.GET(Path_File_Redirect, s.fileRedirectHandler())
 	root.GET(Path_Index, s.indexHandler())
@@ -802,23 +804,69 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 	}
 	upload := exec.Command(s.config.FILESYNC_PATH, "upload", "--md5", md5, "--location", location, "--filename", filename, "--size", strconv.FormatInt(size, 10), "--token", token)
 	output := bytes.Buffer{}
+	stderr := bytes.Buffer{}
 	upload.Stdin = file
 	upload.Stdout = &output
-	upload.Stderr = os.Stderr
-
+	upload.Stderr = &stderr
 	if s.skip_tls_verify {
 		env := os.Environ()
 		env = append(env, `development=true`)
 		upload.Env = env
 	}
-
+	go func() {
+		for {
+			time.Sleep(time.Millisecond * 100)
+			if upload.ProcessState != nil && upload.ProcessState.Exited() {
+				log.Println("proocess exited.")
+				break
+			}
+			outputStr := output.String()
+			log.Println(outputStr)
+			log.Println(stderr.String())
+			if strings.Contains(outputStr, "connect server failed") {
+				err = upload.Process.Kill()
+				if err != nil {
+					log.Println("kill process failed:" + err.Error())
+				} else {
+					break
+				}
+			}
+		}
+	}()
 	err = upload.Run()
+
 	if err != nil {
-		fmt.Printf(output.String())
-		fmt.Printf(err.Error())
+		log.Println(output.String())
+		log.Println(stderr.String())
+		log.Println(err.Error())
 		return false, err
 	}
+	log.Println("file upload success!!!")
 	return true, nil
+}
+
+//In general, do not use this function for non-api handler
+func (s *FileSyncWebServer) GetLoginUserFromSessionAndBearer(ctx *goweb.Context) (user *models.User, err error) {
+	if user, err := s.GetLoginUser(ctx); err == nil {
+		return user, err
+	}
+	tokenstr, err := auth.GetBearerToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	token := &oauth2.Token{AccessToken: tokenstr}
+	if ok, sub, err := auth.CheckToken(s.rac, token, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
+		if !ok {
+			return nil, errors.New("the session is invalid or has expired")
+		}
+		user := s.GetStorage(ctx).GetUserByOpId(sub)
+		if user == nil {
+			return nil, errors.New("not found user")
+		}
+		return user, nil
+	} else {
+		return nil, err
+	}
 }
 func (s *FileSyncWebServer) fileUploadPostHandler() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
@@ -839,7 +887,14 @@ func (s *FileSyncWebServer) fileUploadPostHandler() goweb.HandlerFunc {
 			panic(err)
 		}
 		if ok, err := upload_file(s, ctx, file, md5, header.Filename, path, header.Size); ok {
-			ctx.Success(nil)
+			user, err := s.GetLoginUserFromSessionAndBearer(ctx)
+			if err != nil {
+				panic(err)
+			}
+			file := s.GetStorage(ctx).GetExactFileByPath(filepath.Join(path, "/", header.Filename), user.Partition_id)
+			downloadUrl := Path_Download_File + "/" + file["id"].(string) + "/" + header.Filename
+			log.Println("file url:", downloadUrl)
+			ctx.Success(downloadUrl)
 		} else {
 			panic(err)
 		}
@@ -850,13 +905,13 @@ func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 		segments := strings.Split(ctx.Request.URL.Path, "/")
 		file_id := segments[3]
 		file_name := segments[4]
-		s.downloadFile(ctx, file_id, file_name, "", "application/octet-stream", true)
+		s.downloadFile(ctx, file_id, file_name, ctx.Request.FormValue("raw"), "application/octet-stream", true)
 	}
 }
 
 func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, file_name string, rawType string, contentType string, download bool) {
 	if rawType != "" {
-		reg, err := regexp.Compile(`\.[^\/]+$`)
+		reg, err := regexp.Compile(`\.[^\/\.]+$`)
 		if err != nil {
 			panic(err)
 		}
@@ -864,7 +919,13 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, fil
 	}
 
 	server_file := s.GetStorage(ctx).GetServerFileByFileId(file_id)
-	if server_file.User_id != s.MustGetLoginUser(ctx).Id {
+
+	user, err := s.GetLoginUserFromSessionAndBearer(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	if server_file.User_id != user.Id {
 		panic("no permissions")
 	}
 	if file_name != server_file.Name {
@@ -911,7 +972,7 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, fil
 		//begin decoding
 		img, err := goheif.Decode(tempFile)
 		if err != nil {
-			log.Panic(fmt.Sprintf("Failed to parse the heic file %s: %v\n", tempFile.Name(), err))
+			log.Panicf("Failed to parse the heic file %s: %v\n", tempFile.Name(), err)
 		}
 		err = jpeg.Encode(ctx.Writer, img, nil)
 		if err != nil {
