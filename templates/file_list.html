@@ -3,6 +3,10 @@
     <div id="error"></div>
     <input id="file" style="display:none" type="file" onchange="uploadFile(files[0])">
     <div class="mb-3">
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search files..." style="flex: 1;">
+            <button class="btn btn-primary" onclick="performSearch()">Search</button>
+        </div>
         <a class="btn btn-primary" href="{{.Path_File_Edit}}?path={{.File_Path}}">create folder</a>
         <a class="btn btn-primary" href="#" onclick='$("#file").click()'>upload file</a>
         <a class="btn btn-primary directory-copy" href="#">copy</a>
@@ -224,5 +228,21 @@
     }
     this.ondrop = dropHandler
     this.ondragover = dragOverHandler
+
+    function performSearch() {
+        var searchTerm = document.getElementById('searchInput').value.trim();
+        if (searchTerm === '') {
+            alert('Please enter a search term');
+            return;
+        }
+        var currentPath = new URLSearchParams(location.search).get("path") || "/";
+        window.location.href = "/search?query=" + encodeURIComponent(searchTerm) + "&path=" + encodeURIComponent(currentPath);
+    }
+
+    document.getElementById('searchInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            performSearch();
+        }
+    });
 </script>
 {{end}}
