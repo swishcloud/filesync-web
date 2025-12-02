@@ -47,4 +47,5 @@ type Storage interface {
 	GetParents(partition_id string, id string, max_revision int64) []map[string]interface{}
 	Delete_histories(days int)
 	Query_server_files_to_be_deleted(server_id string) []map[string]interface{}
+	QueryFileByName(partition_id string, name string) []map[string]interface{}
 }

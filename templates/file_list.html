@@ -236,7 +236,8 @@
             return;
         }
         var currentPath = new URLSearchParams(location.search).get("path") || "/";
-        window.location.href = "/search?query=" + encodeURIComponent(searchTerm) + "&path=" + encodeURIComponent(currentPath);
+        var currentCommitId = new URLSearchParams(location.search).get("commit_id") || "";
+        window.location.href = "/search?query=" + encodeURIComponent(searchTerm) + "&path=" + encodeURIComponent(currentPath) + "&commit_id=" + encodeURIComponent(currentCommitId);
     }
 
     document.getElementById('searchInput').addEventListener('keypress', function (e) {

@@ -71,6 +71,7 @@ const (
 	Path_File_Move          = "/file_move"
 	Path_File_Copy          = "/file_copy"
 	Path_File_List          = "/file/list"
+	Path_Search             = "/search"
 	Path_Login              = "/login"
 	Path_Login_Callback     = "/login-callback"
 	Path_Logout             = "/logout"
@@ -209,6 +210,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File, s.fileDetailsHandler())
 	root.GET(Path_File_List, s.fileListHandler())
+	root.GET(Path_Search, s.searchHandler())
 	open.GET(Path_Login, s.loginHandler())
 	open.GET(Path_Login_Callback, s.loginCallbackHandler())
 	root.POST(Path_Logout, s.logoutHandler())
@@ -237,7 +239,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	root.GET(Path_Stat, s.statHandler())
 }
 
-//dl value: 0 not download, 1 download
+// dl value: 0 not download, 1 download
 func (s *FileSyncWebServer) generateShareUrl(path string, token string, dl string) string {
 	if dl != "1" && dl != "0" {
 		panic("parameter error:dl")
@@ -845,7 +847,7 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 	return true, nil
 }
 
-//In general, do not use this function for non-api handler
+// In general, do not use this function for non-api handler
 func (s *FileSyncWebServer) GetLoginUserFromSessionAndBearer(ctx *goweb.Context) (user *models.User, err error) {
 	if user, err := s.GetLoginUser(ctx); err == nil {
 		return user, err
@@ -1154,5 +1156,50 @@ func (s *FileSyncWebServer) statHandler() goweb.HandlerFunc {
 			SUFTSs []map[string]interface{}
 		}{SUFTSs: sizes}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/stat.html")
+	}
+}
+
+func (s *FileSyncWebServer) searchHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		query := ctx.Request.FormValue("query")
+		path := ctx.Request.FormValue("path")
+		commit_id := ctx.Request.FormValue("commit_id")
+		user := s.MustGetLoginUser(ctx)
+
+		if path == "" {
+			path = "/"
+		}
+		if query == "" {
+			// No search term, redirect back
+			http.Redirect(ctx.Writer, ctx.Request, getFileListUrl("", path, ""), http.StatusFound)
+			return
+		}
+
+		if commit_id == "" {
+			commit := s.GetStorage(ctx).GetPartitionFirstCommit(user.Partition_id)
+			commit_id = commit["id"].(string)
+		}
+		// Search for matching files
+		matchedFiles := s.GetStorage(ctx).QueryFileByName(user.Partition_id, query)
+
+		data := struct {
+			Query   string
+			Path    string
+			Files   []map[string]interface{}
+			BackUrl string
+		}{Query: query, Path: path, Files: matchedFiles, BackUrl: getFileListUrl(commit_id, path, "")}
+
+		ctx.FuncMap["detailUrl"] = func(file map[string]interface{}) (string, error) {
+			filePath := file["path"].(string)
+			if file["type"] == "1" {
+				return getFileUrl(file["commit_id"].(string), filePath), nil
+			} else {
+				return getFileListUrl(file["commit_id"].(string), filePath, ""), nil
+			}
+		}
+
+		model := s.newPageModel(ctx, data)
+		model.PageTitle = "Search Results"
+		ctx.RenderPage(model, "templates/layout.html", "templates/search_results.html")
 	}
 }

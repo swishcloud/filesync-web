@@ -237,7 +237,7 @@ func (m *SQLManager) GetHistoryRevisions(path, partition_id string, max_revision
 	return rows
 }
 
-//insert a file if t value is 1,if t value is 2 insert a directory.
+// insert a file if t value is 1,if t value is 2 insert a directory.
 func (d *fileManager) insertFile(name string, file_id string, p_file_id *string, md5 *string, is_hidden bool, t int, source *string) {
 	if t != 1 && t != 2 {
 		panic("the file type can only be 1 or 2.")
@@ -690,4 +690,19 @@ func (m *SQLManager) Query_server_files_to_be_deleted(server_id string) []map[st
 	sql := `select server_file.*,file_info.path,file_info.md5 from server_file join file_info on server_file.file_info_id=file_info.id where file_info.id in(select file_info.id from file_info left join file on file_info.id=file.file_info_id group by file_info.id
 		having bool_and(is_deleted)=true or count(is_deleted)=0) and server_file.is_completed=true and server_id=$1`
 	return m.Tx.ScanRows(sql, server_id)
+}
+func (m *SQLManager) QueryFileByName(partition_id string, name string) []map[string]interface{} {
+	name = "%" + name + "%"
+	sql := `WITH RECURSIVE t AS(
+		select name::text as path,name as name,start_commit_id as commit_id,file_info_id,type,p_file_id,file_id,file.id from file 
+		inner join file_info on file.file_info_id=file_info.id
+		where partition_id=$1 and is_deleted=false and (p_file_id is not null and name ILIKE $2 or file_info.md5 ILIKE $2)
+		union
+		select f1.name || '/' || t.path,t.name as name,CASE WHEN t_commit.insert_time<f1_commit.insert_time THEN f1_commit.id ELSE t_commit.id END,t.file_info_id,t.type,f1.p_file_id,f1.file_id,t.id from file f1 
+		inner join t on t.p_file_id=f1.file_id
+		inner join commit t_commit on t_commit.id=t.commit_id
+		inner join commit f1_commit on f1_commit.id=f1.start_commit_id 
+		where f1.partition_id=$1
+	)select t.*,file_info.insert_time,file_info.size from t inner join file_info on t.file_info_id=file_info.id where t.p_file_id is null;`
+	return m.Tx.ScanRows(sql, partition_id, name)
 }

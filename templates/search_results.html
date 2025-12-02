@@ -1,0 +1,75 @@
+{{define "content"}}
+<div id="cont" class="container">
+    <div id="error"></div>
+
+    <div class="mb-3">
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search files..." style="flex: 1;"
+                value="{{.Query}}">
+            <button class="btn btn-primary" onclick="performSearch()">Search</button>
+        </div>
+        <a class="btn btn-secondary" href="{{.BackUrl}}">Back</a>
+    </div>
+
+    <p class="text-dark"><strong>Search Results for:</strong> "{{.Query}}"</p>
+
+    {{if .Files}}
+    <table class="table">
+        <tr>
+            <th><input type="checkbox"></th>
+            <th>name</th>
+            <th>revision</th>
+            <th>path</th>
+            <th>type</th>
+            <th>size</th>
+            <th>modified</th>
+        </tr>
+        {{range .Files}}
+        {{$type:=index . "type"}}
+        {{$insert_time:=index . "insert_time"}}
+        {{$size:=index . "size"}}
+        <tr id='{{index . "id"}}' file_type='{{index . "type"}}' name='{{index . "name"}}'
+            commit_id='{{index . "commit_id"}}'>
+            <td><input type="checkbox"></td>
+            <td><a style="color:blue" href="{{detailUrl .}}">{{index . "name"}}</a></td>
+            <td>{{index . "commit_id"}}</td>
+            <td>{{index . "path"}}</td>
+            <td>{{if eq $type "1"}}
+                file
+                {{else}}folder
+                {{end}}
+            </td>
+            {{if $size}}
+            <td>{{format_file_size $size}}</td>
+            {{else}}
+            <td></td>
+            {{end}}
+            <td>{{formatTimeString $insert_time ""}}</td>
+        </tr>
+        {{end}}
+    </table>
+    {{else}}
+    <p class="text-muted">No files found matching your search.</p>
+    {{end}}
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    function performSearch() {
+        var searchTerm = document.getElementById('searchInput').value.trim();
+        if (searchTerm === '') {
+            alert('Please enter a search term');
+            return;
+        }
+        var currentPath = new URLSearchParams(location.search).get("path") || "/";
+        window.location.href = "/search?query=" + encodeURIComponent(searchTerm) + "&path=" + encodeURIComponent(currentPath);
+    }
+
+    document.getElementById('searchInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            performSearch();
+        }
+    });
+</script>
+{{end}}
