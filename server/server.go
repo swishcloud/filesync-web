@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/tls"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -26,24 +27,26 @@ import (
 	"github.com/swishcloud/filesync-web/storage/models"
 	"github.com/swishcloud/filesync/session"
 	"github.com/swishcloud/goweb"
+	goweblog "github.com/swishcloud/goweb/log"
 )
 
 type Config struct {
-	Listen_ip      string      `yaml:"listen_ip"`
-	Listen_port    string      `yaml:"listen_port"`
-	Tcp_port       int         `yaml:"tcp_port"`
-	Website_domain string      `yaml:"website_domain"`
-	FILE_LOCATION  string      `yaml:"file_location"`
-	DB_CONN_INFO   string      `yaml:"db_conn_info"`
-	OAuth          ConfigOAuth `yaml:"oauth"`
-	upload_folder  string
-	temp_folder    string
-	Tls_cert_file  string              `yaml:"tls_cert_file"`
-	Tls_key_file   string              `yaml:"tls_key_file"`
-	HISTORY_DAYS_N int                 `yaml:"HISTORY_DAYS_N"`
-	FILESYNC_PATH  string              `yaml:"FILESYNC_PATH"`
-	ContentTypes   []ConfigContentType `yaml:"CONTENT_TYPES"`
-	CORS_Whitelist []string            `yaml:"CORS_Whitelist"`
+	Listen_ip        string      `yaml:"listen_ip"`
+	Listen_port      string      `yaml:"listen_port"`
+	Tcp_port         int         `yaml:"tcp_port"`
+	Website_domain   string      `yaml:"website_domain"`
+	FILE_LOCATION    string      `yaml:"file_location"`
+	DB_CONN_INFO     string      `yaml:"db_conn_info"`
+	LOG_DB_CONN_INFO string      `yaml:"log_db_conn_info"`
+	OAuth            ConfigOAuth `yaml:"oauth"`
+	upload_folder    string
+	temp_folder      string
+	Tls_cert_file    string              `yaml:"tls_cert_file"`
+	Tls_key_file     string              `yaml:"tls_key_file"`
+	HISTORY_DAYS_N   int                 `yaml:"HISTORY_DAYS_N"`
+	FILESYNC_PATH    string              `yaml:"FILESYNC_PATH"`
+	ContentTypes     []ConfigContentType `yaml:"CONTENT_TYPES"`
+	CORS_Whitelist   []string            `yaml:"CORS_Whitelist"`
 }
 type ConfigOAuth struct {
 	ClientId             string `yaml:"ClientId"`
@@ -256,6 +259,15 @@ func (s *TcpServer) serveClient(client *client) {
 	}
 }
 func (s *FileSyncWebServer) Serve() {
+	//bind log,compression middlewares
+	db, _ := sql.Open("postgres", s.config.LOG_DB_CONN_INFO)
+	defer db.Close()
+
+	if err := goweblog.InitDB(db); err != nil {
+		log.Fatal(err)
+	}
+	s.engine.RouterGroup.Use(goweblog.NewLoggingMiddleware(s.config.Website_domain, goweblog.NewDatabaseLogger(db)).Handler)
+	s.engine.RouterGroup.Use(goweb.CompressionMiddleware)
 
 	s.bindHandlers(s.engine.RouterGroup.Group())
 	apiGroup := s.engine.RouterGroup.Group()

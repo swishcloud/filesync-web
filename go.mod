@@ -15,7 +15,7 @@ require (
 	github.com/swishcloud/filesync v0.0.0-20211122140413-00089a9d4ac2
 	github.com/swishcloud/gostudy v0.1.9
 	github.com/swishcloud/gostudy/common v0.0.0-20240421081823-5adb8dc0336a
-	github.com/swishcloud/goweb v0.1.0
+	github.com/swishcloud/goweb v0.2.0
 	github.com/swishcloud/identity-provider v0.0.0-20220502133607-4936a3041bc0
 	golang.org/x/oauth2 v0.14.0
 	gopkg.in/yaml.v2 v2.4.0

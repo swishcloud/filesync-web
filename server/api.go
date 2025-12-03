@@ -31,7 +31,6 @@ const (
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
-	group.Use(func(ctx *goweb.Context) { ctx.Writer.EnsureInitialzed(false) })
 	group.GET(API_PATH_Server_Files_To_BE_Deleted, s.serverFilesToBeDeletedGetHandler())
 	group.POST(API_Reset_Server_File, s.resetServerFile())
 	group.Use(s.apiMiddleware())
@@ -55,7 +54,6 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 
 func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		ctx.Writer.EnsureInitialzed(true)
 		if tokenstr, err := auth.GetBearerToken(ctx); err == nil {
 			token := &oauth2.Token{AccessToken: tokenstr}
 			if ok, sub, err := auth.CheckToken(s.rac, token, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
@@ -69,9 +67,11 @@ func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
 				}
 				ctx.Data["user"] = user
 			} else {
+				ctx.Abort()
 				panic(err)
 			}
 		} else {
+			ctx.Abort()
 			panic(err)
 		}
 	}

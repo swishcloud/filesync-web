@@ -143,9 +143,6 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 				ctx.Writer.Header().Set("Content-Type", "application/octet-stream")
 				ctx.Writer.Header().Set("Content-Disposition", `attachment; filename="`+server_file.Name+`"`)
 				ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(server_file.Size, 10))
-				if ctx.Writer.Compress {
-					panic("compression should not pick up")
-				}
 				_, err = io.CopyN(ctx.Writer, s, server_file.Size)
 				if err != nil {
 					log.Println(err)
@@ -511,9 +508,6 @@ func (s *FileSyncWebServer) serverEditHandler() goweb.HandlerFunc {
 }
 func (s *FileSyncWebServer) genericMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		if strings.Index(ctx.Request.URL.Path, Path_Download_File) != 0 && strings.Index(ctx.Request.URL.Path, Path_File_Preview) != 0 {
-			ctx.Writer.EnsureInitialzed(true)
-		}
 		if session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
 			user := s.GetStorage(ctx).GetUserByOpId(session.Claims["sub"].(string))
 			ctx.Data["user"] = user
@@ -524,6 +518,7 @@ func (s *FileSyncWebServer) checkLoginMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
 		if ctx.Data["user"] == nil {
 			http.Redirect(ctx.Writer, ctx.Request, Path_Login, 302)
+			ctx.Abort()
 		}
 	}
 }
@@ -951,10 +946,6 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, fil
 	} else {
 		ctx.Writer.Header().Set("Content-Disposition", `filename="`+server_file.Name+`"`)
 	}
-	if ctx.Writer.Compress {
-		panic("compression should not pick up")
-	}
-
 	if strings.ToLower(rawType) == ".heic" {
 		//create a tmp file
 		tempFile, err := os.CreateTemp("", "")
@@ -1116,7 +1107,7 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 				break
 			}
 		}
-		CORSAndCaching(ctx.Writer.ResponseWriter, ctx.Request, s.config.CORS_Whitelist, true)
+		CORSAndCaching(ctx.Writer, ctx.Request, s.config.CORS_Whitelist, true)
 		s.downloadFile(ctx, file_id, file_name, rawType, contentType, false)
 	}
 }
