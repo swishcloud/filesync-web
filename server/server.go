@@ -267,7 +267,6 @@ func (s *FileSyncWebServer) Serve() {
 		log.Fatal(err)
 	}
 	s.engine.RouterGroup.Use(goweblog.NewLoggingMiddleware(s.config.Website_domain, goweblog.NewDatabaseLogger(db)).Handler)
-	s.engine.RouterGroup.Use(goweb.CompressionMiddleware)
 
 	s.bindHandlers(s.engine.RouterGroup.Group())
 	apiGroup := s.engine.RouterGroup.Group()

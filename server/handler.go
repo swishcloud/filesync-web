@@ -90,12 +90,12 @@ const (
 
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open := root.Group()
-	root.Use(s.genericMiddleware())
-	root.Use(s.checkLoginMiddleware())
-	open.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
+	compression := open.Group()
+	compression.Use(goweb.CompressionMiddleware)
+	compression.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
 		http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))).ServeHTTP(context.Writer, context.Request)
 	})
-	open.RegexMatch(regexp.MustCompile(`/sh/.+`), func(ctx *goweb.Context) {
+	compression.RegexMatch(regexp.MustCompile(`/sh/.+`), func(ctx *goweb.Context) {
 		r := regexp.MustCompile("[^/]+")
 		strs := r.FindAllString(ctx.Request.URL.Path, -1)
 		token := strs[1]
@@ -200,9 +200,13 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 
 		}
 	})
+	root.Use(s.genericMiddleware())
+	root.Use(s.checkLoginMiddleware())
 	open.Use(s.genericMiddleware())
 	open.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.RegexMatch(regexp.MustCompile(Path_File_Preview+`/.+`), s.filePreviewHandler())
+	open.Use(goweb.CompressionMiddleware)
+	root.Use(goweb.CompressionMiddleware)
 	root.GET(Path_File_Redirect, s.fileRedirectHandler())
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File, s.fileDetailsHandler())
