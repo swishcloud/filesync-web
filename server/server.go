@@ -202,20 +202,23 @@ func (s *TcpServer) serveSessions() {
 				if client.user == nil {
 					continue
 				}
-				msg := message.NewMessage(message.MT_SYNC)
-				storage := storage.NewSQLManager(s.config.DB_CONN_INFO)
-				defer storage.Commit()
-				msg.Header["max"] = -1
-				msg.Header["max_commit_id"] = storage.GetPartitionLatestCommit(client.partition_id)["id"]
-				msg.Header["first_commit_id"] = storage.GetPartitionFirstCommit(client.partition_id)["id"]
-				msg.Header["partition_id"] = client.partition_id
-				if err := client.session.Send(msg, nil); err != nil {
-					go func(session *session.Session) {
-						s.disconnect <- session
-					}(client.session)
-				} else {
-					log.Println("notified a client")
-				}
+				func() {
+					msg := message.NewMessage(message.MT_SYNC)
+					storage := storage.NewSQLManager(s.config.DB_CONN_INFO)
+					defer storage.Commit()
+					msg.Header["max"] = -1
+					msg.Header["max_commit_id"] = storage.GetPartitionLatestCommit(client.partition_id)["id"]
+					msg.Header["first_commit_id"] = storage.GetPartitionFirstCommit(client.partition_id)["id"]
+					msg.Header["partition_id"] = client.partition_id
+					if err := client.session.Send(msg, nil); err != nil {
+						go func(session *session.Session) {
+							s.disconnect <- session
+						}(client.session)
+					} else {
+						log.Println("notified a client")
+					}
+
+				}()
 			}
 		}
 	}
