@@ -151,10 +151,14 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 		file_actions_json := ctx.Request.PostForm.Get("file_actions")
 		delete_actions_json := ctx.Request.PostForm.Get("delete_actions")
 		delete_by_path_actions_json := ctx.Request.PostForm.Get("delete_by_path_actions")
+		move_actions_json := ctx.Request.PostForm.Get("move_actions")
+		rename_actions_json := ctx.Request.PostForm.Get("rename_actions")
 		directory_actions := []storage.CreateDirectoryAction{}
 		file_actions := []storage.CreateFileAction{}
 		delete_actions := []storage.DeleteAction{}
 		delete_by_path_actions := []storage.DeleteByPathAction{}
+		move_actions := []storage.MoveAction{}
+		rename_actions := []storage.RenameAction{}
 		err = json.Unmarshal([]byte(directory_actions_json), &directory_actions)
 		if err != nil {
 			fmt.Println("failed to parse the json:" + directory_actions_json)
@@ -172,6 +176,14 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 		if err != nil {
 			panic(err)
 		}
+		json.Unmarshal([]byte(move_actions_json), &move_actions)
+		if err != nil {
+			panic(err)
+		}
+		json.Unmarshal([]byte(rename_actions_json), &rename_actions)
+		if err != nil {
+			panic(err)
+		}
 		actions := []storage.Action{}
 		for _, a := range directory_actions {
 			actions = append(actions, a)
@@ -183,6 +195,12 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 			actions = append(actions, a)
 		}
 		for _, a := range delete_by_path_actions {
+			actions = append(actions, a)
+		}
+		for _, a := range move_actions {
+			actions = append(actions, a)
+		}
+		for _, a := range rename_actions {
 			actions = append(actions, a)
 		}
 		if len(actions) > 0 {
