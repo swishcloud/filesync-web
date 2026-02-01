@@ -142,10 +142,11 @@ func (action CopyAction) Do(m *fileManager) error {
 type MoveAction struct {
 	Id              string
 	DestinationPath string
+	NewName         *string
 }
 
 func (action MoveAction) Do(m *fileManager) error {
-	return m.copyFile(action.Id, action.DestinationPath, nil, true)
+	return m.copyFile(action.Id, action.DestinationPath, action.NewName, true)
 }
 
 func validatePathFormat(path string) error {
