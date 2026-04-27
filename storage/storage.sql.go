@@ -153,7 +153,7 @@ WITH RECURSIVE CTE AS (
   SELECT * from CTE order by level desc limit 1;`
 	return m.Tx.ScanRow(query, partition_id, path+"/")
 }
-func (m *SQLManager) SuperDoFileActions(actions []Action, user_id, partition_id string) (err error) {
+func (m *SQLManager) SuperDoFileActions(actions []Action, user_id, partition_id string) (commit_id string, err error) {
 	defer func() {
 		err := recover()
 		if err != nil {
@@ -161,7 +161,7 @@ func (m *SQLManager) SuperDoFileActions(actions []Action, user_id, partition_id 
 			panic(err)
 		}
 	}()
-	commit_id := uuid.New().String()
+	commit_id = uuid.New().String()
 	m.Tx.MustExec(`LOCK TABLE file IN SHARE ROW EXCLUSIVE MODE;`)
 	m.Tx.MustExec(`INSERT INTO public.commit(
 		id, partition_id, index, insert_time)
@@ -183,7 +183,7 @@ func (m *SQLManager) SuperDoFileActions(actions []Action, user_id, partition_id 
 	if err != nil {
 		m.Rollback()
 	}
-	return err
+	return commit_id, err
 }
 
 type fileManager struct {
@@ -596,7 +596,7 @@ func (m *SQLManager) AddOrUpdateUser(sub string, name string) (user *models.User
 		actions := []Action{}
 		action := CreateDirectoryAction{Path: "/"}
 		actions = append(actions, action)
-		if err := m.SuperDoFileActions(actions, id, new_partition_id); err != nil {
+		if _, err := m.SuperDoFileActions(actions, id, new_partition_id); err != nil {
 			panic(err)
 		}
 		user = m.GetUserByOpId(sub)

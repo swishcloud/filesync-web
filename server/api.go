@@ -203,12 +203,13 @@ func (s *FileSyncWebServer) fileApiPostHandler() goweb.HandlerFunc {
 		for _, a := range rename_actions {
 			actions = append(actions, a)
 		}
+		commit_id := ""
 		if len(actions) > 0 {
-			if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+			if commit_id, err = s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 				panic(err)
 			}
 		}
-		ctx.Success(nil)
+		ctx.Success(commit_id)
 	}
 }
 
@@ -248,6 +249,7 @@ func (s *FileSyncWebServer) fileBlockApiPostHandler() goweb.HandlerFunc {
 			panic(err)
 		}
 		s.GetStorage(ctx).AddFileBlock(server_file_id, name, start_i, end_i)
+		ctx.Success(nil)
 	}
 }
 

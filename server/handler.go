@@ -334,7 +334,7 @@ func (s *FileSyncWebServer) fileRenamePostHandler() goweb.HandlerFunc {
 		if len(histories) == 0 {
 			panic("can not find parent directory")
 		}
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+		if _, err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), parent_path, ""))
@@ -386,7 +386,7 @@ func (s *FileSyncWebServer) fileEditPostHandler() goweb.HandlerFunc {
 		if len(histories) == 0 {
 			panic("can not find destination directory")
 		}
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+		if _, err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), parent_path, ""))
@@ -408,7 +408,7 @@ func (s *FileSyncWebServer) fileMovePostHandler() goweb.HandlerFunc {
 		if len(histories) == 0 {
 			panic("can not find destination directory")
 		}
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+		if _, err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), destination, ""))
@@ -431,7 +431,7 @@ func (s *FileSyncWebServer) fileCopyPostHandler() goweb.HandlerFunc {
 		if len(histories) == 0 {
 			panic("can not find destination directory")
 		}
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+		if _, err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(getFileListUrl(histories[0]["commit_id"].(string), destination, ""))
@@ -459,7 +459,7 @@ func (s *FileSyncWebServer) directoryDeleteHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.DeleteAction{Id: id}
 		actions = append(actions, action)
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+		if _, err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(nil)
@@ -564,7 +564,7 @@ func (s *FileSyncWebServer) fileDeleteHandler() goweb.HandlerFunc {
 		actions := []storage.Action{}
 		action := storage.DeleteAction{Id: id}
 		actions = append(actions, action)
-		if err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
+		if _, err := s.GetStorage(ctx).SuperDoFileActions(actions, s.MustGetLoginUser(ctx).Id, s.MustGetLoginUser(ctx).Partition_id); err != nil {
 			panic(err)
 		}
 		ctx.Success(nil)
@@ -791,6 +791,59 @@ func (s *FileSyncWebServer) logoutHandler() goweb.HandlerFunc {
 		})
 	}
 }
+func download_file(s *FileSyncWebServer, ctx *goweb.Context, path string, commitId string, savePath string) (bool, error) {
+	token, err := auth.GetBearerToken(ctx)
+	if err != nil {
+		session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify)
+		if err != nil {
+			return false, err
+		}
+		token, err = session.GetAccessToken(s.oAuth2Config)
+		if err != nil {
+			return false, err
+		}
+	}
+	download := exec.Command(s.config.FILESYNC_PATH, "download", "--path", path, "--commit_id", commitId, "--save_path", savePath, "--token", token)
+	output := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	download.Stdout = &output
+	download.Stderr = &stderr
+	if s.skip_tls_verify {
+		env := os.Environ()
+		env = append(env, `development=true`)
+		download.Env = env
+	}
+	go func() {
+		for {
+			time.Sleep(time.Millisecond * 100)
+			if download.ProcessState != nil && download.ProcessState.Exited() {
+				log.Println("process exited.")
+				break
+			}
+			outputStr := output.String()
+			log.Println(outputStr)
+			log.Println(stderr.String())
+			if strings.Contains(outputStr, "connect server failed") {
+				err = download.Process.Kill()
+				if err != nil {
+					log.Println("kill process failed:" + err.Error())
+				} else {
+					break
+				}
+			}
+		}
+	}()
+	err = download.Run()
+
+	if err != nil {
+		log.Println(output.String())
+		log.Println(stderr.String())
+		log.Println(err.Error())
+		return false, err
+	}
+	log.Println("file download success!!!")
+	return true, nil
+}
 func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 string, filename string, location string, size int64) (bool, error) {
 	token, err := auth.GetBearerToken(ctx)
 	if err != nil {
@@ -909,8 +962,69 @@ func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 		s.downloadFile(ctx, file_id, file_name, ctx.Request.FormValue("raw"), "application/octet-stream", true)
 	}
 }
-
 func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, file_name string, rawType string, contentType string, download bool) {
+	if rawType != "" {
+		reg, err := regexp.Compile(`\.[^\/\.]+$`)
+		if err != nil {
+			panic(err)
+		}
+		file_name = reg.ReplaceAllString(file_name, rawType)
+	}
+
+	path, err := s.GetStorage(ctx).GetFilePath(s.MustGetLoginUser(ctx).Partition_id, file_id, common.MaxInt64)
+	if err != nil {
+		panic(err)
+	}
+
+	if !strings.Contains(path, file_name) {
+		panic("file not found")
+	}
+
+	server_file := s.GetStorage(ctx).GetFileById(file_id)
+
+	f, err := os.CreateTemp("", "")
+	if err != nil {
+		panic(err)
+	}
+	f.Close()
+	tempFilePath := f.Name()
+	if downloaded, err := download_file(s, ctx, path, server_file.Commit_id, tempFilePath); err != nil || !downloaded {
+		panic("download file failed:" + err.Error())
+	}
+
+	ctx.Writer.Header().Set("Content-Type", contentType)
+	if download {
+		ctx.Writer.Header().Set("Content-Disposition", `attachment; filename="`+server_file.Name+`"`)
+	} else {
+		ctx.Writer.Header().Set("Content-Disposition", `filename="`+server_file.Name+`"`)
+	}
+	tempFile, err := os.Open(tempFilePath)
+	if err != nil {
+		panic(err)
+	}
+	defer tempFile.Close()
+	defer os.Remove(tempFilePath)
+	if strings.ToLower(rawType) == ".heic" {
+		//begin decoding
+		img, err := goheif.Decode(tempFile)
+		if err != nil {
+			log.Panicf("Failed to parse the heic file %s: %v\n", tempFile.Name(), err)
+		}
+		err = jpeg.Encode(ctx.Writer, img, nil)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		//The content length is known in this case.
+		ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(*server_file.Size, 10))
+		_, err = io.CopyN(ctx.Writer, tempFile, *server_file.Size)
+		if err != nil {
+			log.Println(err)
+			panic(err)
+		}
+	}
+}
+func (s *FileSyncWebServer) downloadFile2(ctx *goweb.Context, file_id string, file_name string, rawType string, contentType string, download bool) {
 	if rawType != "" {
 		reg, err := regexp.Compile(`\.[^\/\.]+$`)
 		if err != nil {

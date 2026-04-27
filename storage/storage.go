@@ -26,7 +26,7 @@ type Storage interface {
 	UpdateServer(id, name, ip, port string)
 	DeleteServer(id string)
 	SetFileHidden(file_id string, is_hidden bool)
-	SuperDoFileActions(actions []Action, user_id, partition_id string) (err error)
+	SuperDoFileActions(actions []Action, user_id, partition_id string) (commit_id string, err error)
 	GetHistoryRevisions(path, partition_id string, max_revision int64) []map[string]interface{}
 	GetExactFileByPath(path string, partition_id string) map[string]interface{}
 	GetShares(partition_id string) []map[string]interface{}
