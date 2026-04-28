@@ -88,10 +88,66 @@ const (
 	Path_Stat               = "/stat"
 )
 
+type IShareChecker interface {
+	expired() bool
+	cutoffTime() time.Time
+	remainingTime() string
+}
+type ShareChecker struct {
+	data *map[string]interface{}
+}
+
+func (share *ShareChecker) cutoffTime() time.Time {
+	if share.data == nil {
+		panic("data is nil")
+	}
+	const sharingHours = 24 //The effective period for file sharing is 24 hours.
+	if insert_time, err := time.Parse(time.RFC3339, (*share.data)["insert_time"].(string)); err != nil {
+		panic(err)
+	} else {
+		return insert_time.UTC().Add(time.Hour * sharingHours)
+	}
+}
+
+func (share *ShareChecker) expired() bool {
+	return !time.Now().UTC().Before(share.cutoffTime().UTC())
+}
+func (share *ShareChecker) remainingTime() string {
+	duration := share.cutoffTime().UTC().Sub(time.Now().UTC())
+	hours := duration.Hours()
+	minutes := int(duration.Minutes()) % 60
+	res := ""
+	if hours > 0 {
+		res = res + strconv.Itoa(int(hours)) + " hours "
+	}
+	if minutes > 0 {
+		res = res + strconv.Itoa(int(minutes)) + " minutes "
+	}
+	return res
+}
+func (s *FileSyncWebServer) ErrorMiddleware(ctx *goweb.Context) {
+	defer func() {
+		if err := recover(); err != nil {
+			desc := fmt.Sprintf("%s", err)
+			accept := ctx.Request.Header.Get("Accept")
+			if strings.Contains(accept, "application/json") {
+				ctx.Failed(desc)
+			} else {
+				data := struct {
+					Desc string
+				}{desc}
+				model := s.newPageModel(ctx, data)
+				ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+			}
+		}
+	}()
+	ctx.Next()
+}
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open := root.Group()
 	compression := open.Group()
 	compression.Use(goweb.CompressionMiddleware)
+	compression.Use(s.ErrorMiddleware)
 	compression.RegexMatch(regexp.MustCompile(`/static/.+`), func(context *goweb.Context) {
 		http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))).ServeHTTP(context.Writer, context.Request)
 	})
@@ -101,10 +157,19 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		token := strs[1]
 		relative_path := strings.Join(strs[2:], "/")
 		share := s.GetStorage(ctx).GetShareByToken(token)
-		if share == nil {
-			s.showErrorPage(ctx, http.StatusNotFound, "The sharing files not found or expired")
+		found := false
+		if share != nil {
+			checker := ShareChecker{}
+			checker.data = &share
+			if !checker.expired() {
+				found = true
+			}
+		}
+		if !found {
+			s.show404(ctx)
 			return
 		}
+
 		path := filepath.Join(share["path"].(string), relative_path)
 		share_partition_id := share["partition_id"].(string)
 		dl := ctx.Request.FormValue("dl")
@@ -206,7 +271,9 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open.RegexMatch(regexp.MustCompile(Path_Download_File+`/.+`), s.downloadHandler())
 	root.RegexMatch(regexp.MustCompile(Path_File_Preview+`/.+`), s.filePreviewHandler())
 	open.Use(goweb.CompressionMiddleware)
+	open.Use(s.ErrorMiddleware)
 	root.Use(goweb.CompressionMiddleware)
+	root.Use(s.ErrorMiddleware)
 	root.GET(Path_File_Redirect, s.fileRedirectHandler())
 	root.GET(Path_Index, s.indexHandler())
 	root.GET(Path_File, s.fileDetailsHandler())
@@ -256,6 +323,15 @@ func (s *FileSyncWebServer) fileShareHandler() goweb.HandlerFunc {
 		shares := s.GetStorage(ctx).GetShares(partition_id)
 		ctx.FuncMap["detailUrl"] = func(share map[string]interface{}) (string, error) {
 			return s.generateShareUrl("", share["token"].(string), "0"), nil
+		}
+		ctx.FuncMap["remainingTime"] = func(share map[string]interface{}) (string, error) {
+			checker := ShareChecker{}
+			checker.data = &share
+			if checker.expired() {
+				return "expired", nil
+			} else {
+				return checker.remainingTime(), nil
+			}
 		}
 		ctx.FuncMap["pathUrl"] = func(share map[string]interface{}) (string, error) {
 			if share["file_type"] == "1" {

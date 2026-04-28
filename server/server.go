@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/swishcloud/gostudy/common"
@@ -296,7 +295,10 @@ func (s *FileSyncWebServer) GetLoginUser(ctx *goweb.Context) (*models.User, erro
 	}
 	return ctx.Data["user"].(*models.User), nil
 }
-func (s *FileSyncWebServer) showErrorPage(ctx *goweb.Context, status int, msg string) {
+func (s *FileSyncWebServer) show404(ctx *goweb.Context) {
+	s._showErrorPage(ctx, 404, "404 Not Found")
+}
+func (s *FileSyncWebServer) _showErrorPage(ctx *goweb.Context, status int, msg string) {
 	data := struct {
 		Desc string
 	}{Desc: msg}
@@ -319,19 +321,6 @@ func (hw *HandlerWidget) Post_Process(ctx *goweb.Context) {
 		err := m.(storage.Storage).Commit()
 		if err != nil {
 			log.Println(err)
-		}
-	}
-	if ctx.Err != nil {
-		accept := ctx.Request.Header.Get("Accept")
-		if strings.Contains(accept, "application/json") {
-			ctx.Failed(ctx.Err.Error())
-		} else {
-			data := struct {
-				Desc string
-			}{Desc: ctx.Err.Error()}
-			model := hw.s.newPageModel(ctx, data)
-			model.PageTitle = "ERROR"
-			ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
 		}
 	}
 }

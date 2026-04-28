@@ -8,6 +8,7 @@
             <th>max commit id</th>
             <th>file type</th>
             <th>sharing time</th>
+            <th>remaining time</th>
             <th>#</th>
         </tr>
         {{range .Shares}}
@@ -28,6 +29,7 @@
                 {{end}}
             </td>
             <td>{{formatTimeString $time ""}}</td>
+            <td>{{remainingTime .}}</td>
             <td><button type="button" class="btn btn-danger delete">remove</button></td>
         </tr>
         {{end}}
