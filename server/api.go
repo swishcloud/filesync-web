@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -27,12 +28,15 @@ const (
 	API_PATH_Log                        = "/api/log"
 	API_PATH_Commit_Changes             = "/api/commit/changes"
 	API_PATH_Files                      = "/api/files"
+	API_PATH_Share                      = "/api/share"
 	API_Reset_Server_File               = "/api/reset-server-file"
 )
 
 func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
+	group.Use(s.ErrorMiddleware)
 	group.GET(API_PATH_Server_Files_To_BE_Deleted, s.serverFilesToBeDeletedGetHandler())
 	group.POST(API_Reset_Server_File, s.resetServerFile())
+	group.GET(API_PATH_Share, s.shareApiGetHandler())
 	group.Use(s.apiMiddleware())
 	group.GET(API_PATH_File_INFO, s.fileInfoApiGetHandler())
 	group.POST(API_PATH_File_Upload, s.fileUploadApiPostHandler())
@@ -51,29 +55,19 @@ func (s *FileSyncWebServer) bindApiHandlers(group *goweb.RouterGroup) {
 	group.GET(API_PATH_Commit_Changes, s.commitChangesGetHandler())
 	group.GET(API_PATH_Files, s.filesGetHandler())
 }
-
 func (s *FileSyncWebServer) apiMiddleware() goweb.HandlerFunc {
 	return func(ctx *goweb.Context) {
-		if tokenstr, err := auth.GetBearerToken(ctx); err == nil {
-			token := &oauth2.Token{AccessToken: tokenstr}
-			if ok, sub, err := auth.CheckToken(s.rac, token, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err == nil {
-				if !ok {
-					panic("the session has expired.")
-				}
-				user := s.GetStorage(ctx).GetUserByOpId(sub)
-				if user == nil {
-					s.addOrUpdateUser(ctx, token)
-					user = s.GetStorage(ctx).GetUserByOpId(sub)
-				}
-				ctx.Data["user"] = user
-			} else {
-				ctx.Abort()
-				panic(err)
-			}
-		} else {
+		tokenstr, err := auth.GetBearerToken(ctx)
+		if err != nil {
 			ctx.Abort()
 			panic(err)
 		}
+		user, err := s.getUserByToken(ctx, tokenstr)
+		if err != nil {
+			ctx.Abort()
+			panic(err)
+		}
+		ctx.Data["user"] = user
 	}
 }
 func (s *FileSyncWebServer) fileInfoApiGetHandler() goweb.HandlerFunc {
@@ -328,6 +322,45 @@ func (s *FileSyncWebServer) filesGetHandler() goweb.HandlerFunc {
 			panic(err)
 		}
 		ctx.Success(files)
+	}
+}
+func (s *FileSyncWebServer) shareApiGetHandler() goweb.HandlerFunc {
+	return func(ctx *goweb.Context) {
+		token, err := auth.GetBearerToken(ctx)
+		if err != nil {
+			panic(err)
+		}
+		share := s.GetStorage(ctx).GetShareByToken(token)
+		found := false
+		if share != nil {
+			checker := ShareChecker{}
+			checker.data = &share
+			if !checker.expired() {
+				found = true
+			}
+		}
+		if !found {
+			panic("share not found")
+		}
+
+		path := ctx.Request.FormValue("path")
+		share_partition_id := share["partition_id"].(string)
+		share_max_commit_id := share["max_commit_id"].(string)
+		max_commit := s.GetStorage(ctx).GetCommitById(share_max_commit_id)
+		share_max_revision, err := strconv.ParseInt(max_commit["index"].(string), 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		files := s.GetStorage(ctx).GetHistoryRevisions(path, share_partition_id, share_max_revision)
+		if len(files) == 0 {
+			ctx.Abort()
+			log.Panic("not found history for ", path, " ", share_partition_id, " ", share_max_revision)
+			return
+
+		}
+		file_identifier := files[0]["id"].(string)
+		server_file := s.GetStorage(ctx).GetServerFileByFileId(file_identifier)
+		ctx.Success(server_file)
 	}
 }
 func (s *FileSyncWebServer) resetServerFile() goweb.HandlerFunc {

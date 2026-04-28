@@ -125,24 +125,6 @@ func (share *ShareChecker) remainingTime() string {
 	}
 	return res
 }
-func (s *FileSyncWebServer) ErrorMiddleware(ctx *goweb.Context) {
-	defer func() {
-		if err := recover(); err != nil {
-			desc := fmt.Sprintf("%s", err)
-			accept := ctx.Request.Header.Get("Accept")
-			if strings.Contains(accept, "application/json") {
-				ctx.Failed(desc)
-			} else {
-				data := struct {
-					Desc string
-				}{desc}
-				model := s.newPageModel(ctx, data)
-				ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
-			}
-		}
-	}()
-	ctx.Next()
-}
 func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 	open := root.Group()
 	compression := open.Group()
@@ -193,28 +175,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		if dl == "1" { //directly download
 			if file["type"].(string) == "2" {
 			} else { //it's a file
-				server_file := s.GetStorage(ctx).GetServerFileByFileId(file["id"].(string))
-				conn, err := net.Dial("tcp", server_file.Ip+":"+strconv.Itoa(server_file.Port))
-				if err != nil {
-					panic(err)
-				}
-				s := session.NewSession(conn)
-				msg := message.NewMessage(message.MT_Download_File)
-				msg.Header["path"] = server_file.Path
-				_, err = s.Fetch(msg, nil)
-				if err != nil {
-					panic(err)
-				}
-				ctx.Writer.Header().Set("Content-Type", "application/octet-stream")
-				ctx.Writer.Header().Set("Content-Disposition", `attachment; filename="`+server_file.Name+`"`)
-				ctx.Writer.Header().Set("Content-Length", strconv.FormatInt(server_file.Size, 10))
-				_, err = io.CopyN(ctx.Writer, s, server_file.Size)
-				if err != nil {
-					log.Println(err)
-					panic(err)
-				}
-				s.Close()
-
+				s.downloadFile(ctx, 0, path, file_identifier, typed_file.Name, "", "application/octet-stream", true, token)
 			}
 		} else {
 			if file["type"].(string) == "2" { //it's a directory
@@ -867,19 +828,13 @@ func (s *FileSyncWebServer) logoutHandler() goweb.HandlerFunc {
 		})
 	}
 }
-func download_file(s *FileSyncWebServer, ctx *goweb.Context, path string, commitId string, savePath string) (bool, error) {
-	token, err := auth.GetBearerToken(ctx)
-	if err != nil {
-		session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify)
-		if err != nil {
-			return false, err
-		}
-		token, err = session.GetAccessToken(s.oAuth2Config)
-		if err != nil {
-			return false, err
-		}
+func download_file(s *FileSyncWebServer, ctx *goweb.Context, dl_type int, path string, commitId string, savePath string, token string) (bool, error) {
+	var download *exec.Cmd
+	if dl_type == 1 {
+		download = exec.Command(s.config.FILESYNC_PATH, "download", "--path", path, "--commit_id", commitId, "--save_path", savePath, "--token", token)
+	} else {
+		download = exec.Command(s.config.FILESYNC_PATH, "share", "download", "--path", path, "--save_path", savePath, "--token", token)
 	}
-	download := exec.Command(s.config.FILESYNC_PATH, "download", "--path", path, "--commit_id", commitId, "--save_path", savePath, "--token", token)
 	output := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 	download.Stdout = &output
@@ -889,8 +844,12 @@ func download_file(s *FileSyncWebServer, ctx *goweb.Context, path string, commit
 		env = append(env, `development=true`)
 		download.Env = env
 	}
+	run_failed := false
 	go func() {
 		for {
+			if run_failed {
+				break
+			}
 			time.Sleep(time.Millisecond * 100)
 			if download.ProcessState != nil && download.ProcessState.Exited() {
 				log.Println("process exited.")
@@ -900,8 +859,7 @@ func download_file(s *FileSyncWebServer, ctx *goweb.Context, path string, commit
 			log.Println(outputStr)
 			log.Println(stderr.String())
 			if strings.Contains(outputStr, "connect server failed") {
-				err = download.Process.Kill()
-				if err != nil {
+				if err := download.Process.Kill(); err != nil {
 					log.Println("kill process failed:" + err.Error())
 				} else {
 					break
@@ -909,9 +867,10 @@ func download_file(s *FileSyncWebServer, ctx *goweb.Context, path string, commit
 			}
 		}
 	}()
-	err = download.Run()
+	err := download.Run()
 
 	if err != nil {
+		run_failed = true
 		log.Println(output.String())
 		log.Println(stderr.String())
 		log.Println(err.Error())
@@ -921,16 +880,9 @@ func download_file(s *FileSyncWebServer, ctx *goweb.Context, path string, commit
 	return true, nil
 }
 func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 string, filename string, location string, size int64) (bool, error) {
-	token, err := auth.GetBearerToken(ctx)
+	token, err := s.getTokenFromBearerOrSession(ctx)
 	if err != nil {
-		session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify)
-		if err != nil {
-			return false, err
-		}
-		token, err = session.GetAccessToken(s.oAuth2Config)
-		if err != nil {
-			return false, err
-		}
+		return false, err
 	}
 	upload := exec.Command(s.config.FILESYNC_PATH, "upload", "--md5", md5, "--location", location, "--filename", filename, "--size", strconv.FormatInt(size, 10), "--token", token)
 	output := bytes.Buffer{}
@@ -943,8 +895,13 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 		env = append(env, `development=true`)
 		upload.Env = env
 	}
+	run_failed := false
 	go func() {
 		for {
+			if run_failed {
+				break
+
+			}
 			time.Sleep(time.Millisecond * 100)
 			if upload.ProcessState != nil && upload.ProcessState.Exited() {
 				log.Println("proocess exited.")
@@ -966,6 +923,7 @@ func upload_file(s *FileSyncWebServer, ctx *goweb.Context, file io.Reader, md5 s
 	err = upload.Run()
 
 	if err != nil {
+		run_failed = true
 		log.Println(output.String())
 		log.Println(stderr.String())
 		log.Println(err.Error())
@@ -1035,10 +993,15 @@ func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 		segments := strings.Split(ctx.Request.URL.Path, "/")
 		file_id := segments[3]
 		file_name := segments[4]
-		s.downloadFile(ctx, file_id, file_name, ctx.Request.FormValue("raw"), "application/octet-stream", true)
+
+		token, err := s.getTokenFromBearerOrSession(ctx)
+		if err != nil {
+			panic(err)
+		}
+		s.downloadFile(ctx, 1, "", file_id, file_name, ctx.Request.FormValue("raw"), "application/octet-stream", true, token)
 	}
 }
-func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, file_name string, rawType string, contentType string, download bool) {
+func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, dl_type int, path string, file_id string, file_name string, rawType string, contentType string, download bool, token string) {
 	if rawType != "" {
 		reg, err := regexp.Compile(`\.[^\/\.]+$`)
 		if err != nil {
@@ -1046,14 +1009,20 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, fil
 		}
 		file_name = reg.ReplaceAllString(file_name, rawType)
 	}
+	if dl_type == 1 && path == "" {
+		user, err := s.getUserByToken(ctx, token)
+		if err != nil {
+			panic(err)
+		}
 
-	path, err := s.GetStorage(ctx).GetFilePath(s.MustGetLoginUser(ctx).Partition_id, file_id, common.MaxInt64)
-	if err != nil {
-		panic(err)
-	}
+		path, err = s.GetStorage(ctx).GetFilePath(user.Partition_id, file_id, common.MaxInt64)
+		if err != nil {
+			panic(err)
+		}
 
-	if !strings.Contains(path, file_name) {
-		panic("file not found")
+		if !strings.Contains(path, file_name) {
+			panic("file not found")
+		}
 	}
 
 	server_file := s.GetStorage(ctx).GetFileById(file_id)
@@ -1064,7 +1033,7 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, file_id string, fil
 	}
 	f.Close()
 	tempFilePath := f.Name()
-	if downloaded, err := download_file(s, ctx, path, server_file.Commit_id, tempFilePath); err != nil || !downloaded {
+	if downloaded, err := download_file(s, ctx, dl_type, path, server_file.Commit_id, tempFilePath, token); err != nil || !downloaded {
 		panic("download file failed:" + err.Error())
 	}
 
@@ -1302,7 +1271,12 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 			}
 		}
 		CORSAndCaching(ctx.Writer, ctx.Request, s.config.CORS_Whitelist, true)
-		s.downloadFile(ctx, file_id, file_name, rawType, contentType, false)
+
+		token, err := s.getSessionToken(ctx)
+		if err != nil {
+			panic(err)
+		}
+		s.downloadFile(ctx, 1, "", file_id, file_name, rawType, contentType, false, token)
 	}
 }
 func CORSAndCaching(writer http.ResponseWriter, request *http.Request, cors_whitelist []string, permitCrendentials bool) {

@@ -179,11 +179,9 @@ func (m *SQLManager) SuperDoFileActions(actions []Action, user_id, partition_id 
 	if len(changes) == 0 {
 		log.Println("Actions not made changes,rollbacking...")
 		m.Rollback()
+		return "", nil
 	}
-	if err != nil {
-		m.Rollback()
-	}
-	return commit_id, err
+	return commit_id, nil
 }
 
 type fileManager struct {

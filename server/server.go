@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/swishcloud/gostudy/common"
@@ -288,7 +289,40 @@ func (server *FileSyncWebServer) GetStorage(ctx *goweb.Context) storage.Storage 
 	}
 	return m.(storage.Storage)
 }
-
+func (s *FileSyncWebServer) getSessionToken(ctx *goweb.Context) (string, error) {
+	session, err := auth.GetSessionByToken(s.rac, ctx, s.oAuth2Config, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify)
+	if err != nil {
+		return "", err
+	}
+	token, err := session.GetAccessToken(s.oAuth2Config)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+func (s *FileSyncWebServer) getTokenFromBearerOrSession(ctx *goweb.Context) (string, error) {
+	token, err := auth.GetBearerToken(ctx)
+	if err == nil {
+		return token, nil
+	}
+	return s.getSessionToken(ctx)
+}
+func (s *FileSyncWebServer) getUserByToken(ctx *goweb.Context, tokenstr string) (*models.User, error) {
+	token := &oauth2.Token{AccessToken: tokenstr}
+	if ok, sub, err := auth.CheckToken(s.rac, token, s.config.OAuth.IntrospectTokenURL, s.skip_tls_verify); err != nil {
+		return nil, err
+	} else {
+		if !ok {
+			return nil, errors.New("the session has expired.")
+		}
+		user := s.GetStorage(ctx).GetUserByOpId(sub)
+		if user == nil {
+			s.addOrUpdateUser(ctx, token)
+			user = s.GetStorage(ctx).GetUserByOpId(sub)
+		}
+		return user, nil
+	}
+}
 func (s *FileSyncWebServer) GetLoginUser(ctx *goweb.Context) (*models.User, error) {
 	if ctx.Data["user"] == nil {
 		return nil, errors.New("no logged user")
@@ -306,6 +340,24 @@ func (s *FileSyncWebServer) _showErrorPage(ctx *goweb.Context, status int, msg s
 	model.PageTitle = "ERROR"
 	ctx.Writer.WriteHeader(status)
 	ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+}
+func (s *FileSyncWebServer) ErrorMiddleware(ctx *goweb.Context) {
+	defer func() {
+		if err := recover(); err != nil {
+			desc := fmt.Sprintf("%s", err)
+			accept := ctx.Request.Header.Get("Accept")
+			if strings.Contains(accept, "application/json") {
+				ctx.Failed(desc)
+			} else {
+				data := struct {
+					Desc string
+				}{desc}
+				model := s.newPageModel(ctx, data)
+				ctx.RenderPage(model, "templates/layout.html", "templates/error.html")
+			}
+		}
+	}()
+	ctx.Next()
 }
 
 type HandlerWidget struct {
