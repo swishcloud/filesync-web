@@ -728,9 +728,6 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		if server_file == nil {
 			panic("file not found")
 		}
-		ctx.FuncMap["downloadUrl"] = func() (string, error) {
-			return Path_Download_File + "/" + id + "/" + server_file.Name + "?r=" + commit_id, nil
-		}
 		can_delete := false
 		if login_user != nil && login_user.Id == file.User_id {
 			can_delete = true
@@ -749,7 +746,7 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 			Latest_revision_url string
 			PreviewUrl          string
 			IsLatest            bool
-		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url, History: history, IsLatest: is_lastest, PreviewUrl: previewUrl}
+		}{DownloadUrl: Path_Download_File + "/" + id + "/" + server_file.Name + "?r=" + commit_id, DeleteUrl: Path_File + "?id=" + id, File: file, ServerFile: *server_file, FileId: id, CanDelete: can_delete, HistoryUrl: Path_File_History + "?" + p.Encode(), Latest_revision_url: latest_revision_url, History: history, IsLatest: is_lastest, PreviewUrl: previewUrl}
 		ctx.RenderPage(s.newPageModel(ctx, model), "templates/layout.html", "templates/file_details.html")
 	}
 }
