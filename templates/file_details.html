@@ -42,14 +42,6 @@
 {{end}}
 {{define "scripts"}}
 <script>
-    // function downloadFile(url){
-    // $.getJSON(url,function(d){
-    // alert(d.data)
-    // })
-    // }
-    // $("#download").on("click",function(){
-    //     downloadFile('{{downloadUrl}}')
-    // })
     var delete_url = "{{.DeleteUrl}}"
     $("#delete").on("click", function () {
         if (confirm("are you sure you want to delete this file?")) {
