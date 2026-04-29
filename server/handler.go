@@ -175,7 +175,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		if dl == "1" { //directly download
 			if file["type"].(string) == "2" {
 			} else { //it's a file
-				s.downloadFile(ctx, 0, path, file_identifier, typed_file.Name, "", "application/octet-stream", true, token)
+				s.downloadFile(ctx, 0, path, file_identifier, file["commit_id"].(string), typed_file.Name, "", "application/octet-stream", true, token)
 			}
 		} else {
 			if file["type"].(string) == "2" { //it's a directory
@@ -721,7 +721,7 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 		id := m_file["id"].(string)
 		server_file := s.GetStorage(ctx).GetServerFileByFileId(id)
 		file := s.GetStorage(ctx).GetFileById(id)
-		previewUrl, err := s.getFilePreviewUrl(id, file.Name)
+		previewUrl, err := s.getFilePreviewUrl(id, file.Name, commit_id)
 		if err != nil {
 			panic(err)
 		}
@@ -729,7 +729,7 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 			panic("file not found")
 		}
 		ctx.FuncMap["downloadUrl"] = func() (string, error) {
-			return Path_Download_File + "/" + id + "/" + server_file.Name, nil
+			return Path_Download_File + "/" + id + "/" + server_file.Name + "?r=" + commit_id, nil
 		}
 		can_delete := false
 		if login_user != nil && login_user.Id == file.User_id {
@@ -754,7 +754,7 @@ func (s *FileSyncWebServer) fileDetailsHandler() goweb.HandlerFunc {
 	}
 }
 
-func (s *FileSyncWebServer) getFilePreviewUrl(file_id string, filename string) (string, error) {
+func (s *FileSyncWebServer) getFilePreviewUrl(file_id string, filename string, commit_id string) (string, error) {
 	expansion := internal.ExpansionFromFileName(filename)
 	switch expansion {
 	case ".heic":
@@ -762,11 +762,11 @@ func (s *FileSyncWebServer) getFilePreviewUrl(file_id string, filename string) (
 		if err != nil {
 			panic(err)
 		}
-		return "https://" + s.config.Website_domain + Path_File_Preview + "/" + reg.ReplaceAllString(filename, ".jpeg") + "?" + "id=" + url.QueryEscape(file_id) + "&t=" + reg.FindString(filename), nil
+		return "https://" + s.config.Website_domain + Path_File_Preview + "/" + reg.ReplaceAllString(filename, ".jpeg") + "?" + "id=" + url.QueryEscape(file_id) + "&t=" + reg.FindString(filename) + "&r=" + commit_id, nil
 	default:
 		for _, i := range s.config.ContentTypes {
 			if i.Extenstion == expansion {
-				return "https://" + s.config.Website_domain + Path_File_Preview + "/" + filename + "?" + "id=" + url.QueryEscape(file_id), nil
+				return "https://" + s.config.Website_domain + Path_File_Preview + "/" + filename + "?" + "id=" + url.QueryEscape(file_id) + "&r=" + commit_id, nil
 			}
 		}
 	}
@@ -993,15 +993,15 @@ func (s *FileSyncWebServer) downloadHandler() goweb.HandlerFunc {
 		segments := strings.Split(ctx.Request.URL.Path, "/")
 		file_id := segments[3]
 		file_name := segments[4]
-
+		commit_id := ctx.Request.FormValue("r")
 		token, err := s.getTokenFromBearerOrSession(ctx)
 		if err != nil {
 			panic(err)
 		}
-		s.downloadFile(ctx, 1, "", file_id, file_name, ctx.Request.FormValue("raw"), "application/octet-stream", true, token)
+		s.downloadFile(ctx, 1, "", file_id, commit_id, file_name, ctx.Request.FormValue("raw"), "application/octet-stream", true, token)
 	}
 }
-func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, dl_type int, path string, file_id string, file_name string, rawType string, contentType string, download bool, token string) {
+func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, dl_type int, path string, file_id string, commit_id string, file_name string, rawType string, contentType string, download bool, token string) {
 	if rawType != "" {
 		reg, err := regexp.Compile(`\.[^\/\.]+$`)
 		if err != nil {
@@ -1026,6 +1026,9 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, dl_type int, path s
 	}
 
 	server_file := s.GetStorage(ctx).GetFileById(file_id)
+	if commit_id == "" {
+		commit_id = server_file.Commit_id
+	}
 
 	f, err := os.CreateTemp("", "")
 	if err != nil {
@@ -1033,7 +1036,7 @@ func (s *FileSyncWebServer) downloadFile(ctx *goweb.Context, dl_type int, path s
 	}
 	f.Close()
 	tempFilePath := f.Name()
-	if downloaded, err := download_file(s, ctx, dl_type, path, server_file.Commit_id, tempFilePath, token); err != nil || !downloaded {
+	if downloaded, err := download_file(s, ctx, dl_type, path, commit_id, tempFilePath, token); err != nil || !downloaded {
 		panic("download file failed:" + err.Error())
 	}
 
@@ -1262,6 +1265,7 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 		file_name := segments[3]
 		file_id := ctx.Request.FormValue("id")
 		rawType := ctx.Request.FormValue("t")
+		commit_id := ctx.Request.FormValue("r")
 		expansion := internal.ExpansionFromFileName(file_name)
 		contentType := ""
 		for _, i := range s.config.ContentTypes {
@@ -1276,7 +1280,7 @@ func (s *FileSyncWebServer) filePreviewHandler() goweb.HandlerFunc {
 		if err != nil {
 			panic(err)
 		}
-		s.downloadFile(ctx, 1, "", file_id, file_name, rawType, contentType, false, token)
+		s.downloadFile(ctx, 1, "", file_id, commit_id, file_name, rawType, contentType, false, token)
 	}
 }
 func CORSAndCaching(writer http.ResponseWriter, request *http.Request, cors_whitelist []string, permitCrendentials bool) {
