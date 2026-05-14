@@ -4,24 +4,27 @@
         <span class="font-weight-bold">{{.ServerFile.Name}}</span>
     </div>
     <div>
-        <span>file size:</span>  <span>{{.ServerFile.Size}} bytes</span>
+        <span>file size:</span> <span>{{.ServerFile.Size}} bytes</span>
     </div>
     <div>
-            {{$insert_time:=index .History "insert_time"}}
-        <span>modified:</span>  <span>{{formatTimeString $insert_time ""}}</span>
+        {{$insert_time:=index .History "insert_time"}}
+        <span>modified:</span> <span>{{formatTimeString $insert_time ""}}</span>
     </div>
     <div>
-        <span>user:</span>  <span>{{.File.UserName}}</span>
+        <span>user:</span> <span>{{.File.UserName}}</span>
     </div>
     <div>
-        <span>description:</span>  <span>{{.File.Description}}</span>
+        <span>description:</span> <span>{{.File.Description}}</span>
     </div>
     <div>
-            {{$commit_id:=index .History "commit_id"}}
-        <span>revision:</span>  <span>{{$commit_id}}</span>
+        {{$commit_id:=index .History "commit_id"}}
+        <span>revision:</span> <span>{{$commit_id}}</span>
     </div>
     <div class="my-3">
         <a class="btn btn-primary" href="{{.DownloadUrl}}">download</a>
+        {{if .PreviewUrl}}
+        <a class="btn btn-primary ml-3" href="{{.PreviewUrl}}">preview</a>
+        {{end}}
     </div>
     <img src="{{.QRCodeUrl}}">
     <p>scan qr code to download via mobile phone</p>
@@ -29,6 +32,6 @@
 {{end}}
 {{define "scripts"}}
 <script>
-    
+
 </script>
 {{end}}

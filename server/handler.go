@@ -172,10 +172,22 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 		if file == nil {
 			panic("not found")
 		}
-		if dl == "1" { //directly download
+		if dl == "1" || dl == "2" { //download
 			if file["type"].(string) == "2" {
 			} else { //it's a file
-				s.downloadFile(ctx, 0, path, file_identifier, file["commit_id"].(string), typed_file.Name, "", "application/octet-stream", true, token)
+				contentType := ""
+				expansion := internal.ExpansionFromFileName(typed_file.Name)
+				if dl == "2" {
+					for _, i := range s.config.ContentTypes {
+						if i.Extenstion == expansion {
+							contentType = i.ContentType
+							break
+						}
+					}
+				} else {
+					contentType = "application/octet-stream"
+				}
+				s.downloadFile(ctx, 0, path, file_identifier, file["commit_id"].(string), typed_file.Name, expansion, contentType, dl == "1", token)
 			}
 		} else {
 			if file["type"].(string) == "2" { //it's a directory
@@ -209,6 +221,7 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 			} else {
 				data := struct {
 					DownloadUrl string
+					PreviewUrl  string
 					QRCodeUrl   string
 					Path        string
 					File        models.File
@@ -216,6 +229,13 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 					History     map[string]interface{}
 				}{Path: path, File: typed_file, ServerFile: *server_file, History: file}
 				data.DownloadUrl = "https://" + s.config.Website_domain + s.generateShareUrl(filepath.Join("/", relative_path), token, "1")
+				expansion := internal.ExpansionFromFileName(typed_file.Name)
+				for _, i := range s.config.ContentTypes {
+					if i.Extenstion == expansion {
+						data.PreviewUrl = "https://" + s.config.Website_domain + s.generateShareUrl(filepath.Join("/", relative_path), token, "2")
+						break
+					}
+				}
 				parameters := url.Values{}
 				parameters.Add("str", "https://"+s.config.Website_domain+s.generateShareUrl(filepath.Join("/", relative_path), token, "0"))
 				data.QRCodeUrl = Path_QRCode + "?" + parameters.Encode()
@@ -270,9 +290,6 @@ func (s *FileSyncWebServer) bindHandlers(root *goweb.RouterGroup) {
 
 // dl value: 0 not download, 1 download
 func (s *FileSyncWebServer) generateShareUrl(path string, token string, dl string) string {
-	if dl != "1" && dl != "0" {
-		panic("parameter error:dl")
-	}
 	if path == "/" {
 		path = ""
 	}
