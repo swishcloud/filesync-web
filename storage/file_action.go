@@ -107,8 +107,7 @@ func (action DeleteByPathAction) Do(m *fileManager) error {
 	if file == nil {
 		return errors.New("this source file does not exist.")
 	}
-	m.deleteFile(file["id"].(string))
-	return nil
+	return DeleteAction{file["id"].(string)}.Do(m)
 }
 
 //
